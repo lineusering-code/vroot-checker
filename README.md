@@ -1,147 +1,151 @@
-# 🛡️ Vroot Checker
+# Vroot Checker
 
-**Жёсткая диагностика окружения Android: Root · Virtual · Hook · Integrity.**
+Жёсткий детектор root / виртуализации / хуков для Android. 18 независимых пробов, сотни сигналов, полный читаемый лог с объяснением «что / почему / как проверено» и экспорт отчёта в JSON и Markdown.
 
-Vroot Checker — это движок глубокой диагностики среды выполнения. Идея как в «diagnostics» у RootVm, только сильно злее: не один-два чека `/system/bin/su`, а **13 категорий, 20 проб, 120+ независимых сигналов**, каждый со своим весом, уверенностью (confidence) и доказательствами (evidence), плюс нативный слой на прямых syscall'ах, который тяжело обмануть хуками в Java.
+UI — Material 3 (Jetpack Compose), тёмная/светлая тема, dynamic color, единый набор vector-иконок в стиле Android.
 
 ---
 
-## 🔥 Что умеет
+## Что проверяется
 
-### 1. Root
-| Проба | Что ловит |
+Сигналы сгруппированы в 4 корзины: **Root**, **Virtual**, **Hooking**, **Integrity**.
+
+### Root (7 пробов)
+| ID | Что делает |
 |---|---|
-| `root.binaries` | `su`, `busybox`, `magisk`, `resetprop`, `supolicy`, `daemonsu` по 30+ путям — через `File`, через `PATH`, через нативный `faccessat`, через `stat()` |
-| `root.magisk` | Magisk / Magisk Delta, Zygisk, `/data/adb/magisk`, `magisk.db`, modules, `/proc/net/unix` сокеты Magisk, MagiskHide/DenyList артефакты |
-| `root.ksu` | KernelSU (`ksud`, `/data/adb/ksu`, KSU prctl-канал), APatch, Dynamic KernelSU |
-| `root.mounts` | overlay/tmpfs на системных точках, `/sbin` как tmpfs, расхождение `/proc/mounts` vs `/proc/self/mountinfo` (классика Magisk mount namespace) |
-| `root.props` | `ro.debuggable=1`, `ro.secure=0`, `ro.build.tags=test-keys`, `ro.build.type=userdebug/eng`, `ro.boot.verifiedbootstate != green`, `ro.boot.flash.locked=0`, `ro.boot.veritymode=disabled`, подменённые resetprop-значения |
-| `root.selinux` | Permissive, контексты `u:r:magisk:s0`, `u:r:su:s0`, доступность `/sys/fs/selinux/enforce` на запись |
-| `root.packages` | 40+ пакетов: Magisk Manager (в т.ч. рандомизированные stub'ы), SuperSU, KingRoot, Kingo, LSPosed, Shizuku, RootCloak, Hide My Root и т.д. |
-| `root.writable` | Запись в `/system`, `/vendor`, `/product`, `/data/local`, `remount` возможности |
+| `root.binaries` | Поиск `su`, `busybox`, `magisk`, `ksud` и других бинарников по десяткам путей (Java + native `access()`, сравнение результатов — ловит сокрытие через хуки) |
+| `root.manager` | Артефакты Magisk / KernelSU / APatch: файлы, сокеты, `magisk` в `/proc/net/unix`, следы Zygisk |
+| `root.mounts` | Анализ `/proc/self/mounts` и `mountinfo`: rw на `/system`, `overlayfs`, `tmpfs` в системных точках, скрытые bind-mount, расхождение mounts и mountinfo |
+| `root.props` | `ro.debuggable`, `ro.secure`, `ro.build.tags=test-keys`, `ro.build.type=userdebug/eng`, расхождение Java-API и native `__system_property_get` |
+| `root.selinux` | Режим SELinux (`enforce`), доступность `/sys/fs/selinux`, permissive-контекст процесса |
+| `root.packages` | Установленные root-приложения и скрыватели (Magisk Manager, Shamiko, LSPosed, HideMyApplist и т.д.) |
+| `root.writable` | Попытка записи в `/system`, `/vendor`, `/data/local`, `/etc` и др. |
 
-### 2. Virtual
-| Проба | Что ловит |
+### Virtual (5 пробов)
+| ID | Что делает |
 |---|---|
-| `virt.emulator` | goldfish / ranchu / QEMU: `/dev/qemu_pipe`, `/dev/socket/qemud`, `ueventd.goldfish.rc`, `libc_malloc_debug_qemu.so`, `/proc/tty/drivers` |
-| `virt.build` | `Build.FINGERPRINT/MODEL/PRODUCT/HARDWARE/BOARD/BRAND/DEVICE` — 60+ паттернов (generic, sdk_gphone, vbox86, emu64, cancro, unknown …), кросс-проверка на противоречия |
-| `virt.hypervisor` | Флаг `hypervisor` в `/proc/cpuinfo`, MSR-подобные аномалии, x86-ABI на «телефоне», `/sys/hypervisor`, KVM-артефакты |
-| `virt.vendors` | BlueStacks, Nox, LDPlayer, MEmu, Genymotion, MuMu, VirtualBox (`vboxguest`, `vboxsf`), Android-x86, WSA, Redfinger / VMOS / облачные телефоны |
-| `virt.hardware` | Сенсоры (кол-во/имена), камеры, батарея (вечные 100% / AC), Bluetooth, `/sys/class/thermal`, MAC `02:00:00:00:00:00`, оператор «Android», IMEI `000000…` |
-| `virt.timing` | Uptime, дрейф `SystemClock.elapsedRealtime` vs монотоника, аномалии таймингов инструкций (софтверная эмуляция медленнее) |
-| `virt.appclone` | VirtualApp / Parallel Space / Dual Apps / Island / DroidPlugin: UID > 999999, чужой пакет в `/proc/self/maps`, несовпадение `dataDir` и `packageName`, несколько копий процесса, `/proc/self/cgroup` |
+| `virt.emulator` | Файлы и пакеты QEMU / Genymotion / BlueStacks / Nox / LDPlayer, `qemu_pipe`, `goldfish` |
+| `virt.build` | Build-поля и токены (`generic`, `sdk`, `vbox`, `ranchu`), несогласованный fingerprint |
+| `virt.hypervisor` | Флаги `/proc/cpuinfo`, гипервизор-сигнатуры, нетипичные ABI для железа |
+| `virt.hardware` | Камеры, датчики, батарея, телефония, `tty`-драйверы, число ядер и объём RAM |
+| `virt.appclone` | Запуск в клоне / work-профиле / VirtualApp-контейнере: путь к data, uid, посторонние процессы, счётчик fd |
 
-### 3. Hooking / Debug
-| Проба | Что ловит |
+### Hooking (3 проба)
+| ID | Что делает |
 |---|---|
-| `hook.frida` | Frida-server процессы, дефолтные порты 27042/27043, `frida-gadget`/`gum-js-loop` в `/proc/self/maps` и в списке потоков, D-Bus AUTH-хендшейк на localhost |
-| `hook.xposed` | Xposed / EdXposed / LSPosed / Riru / Dobby / Substrate: stacktrace-инъекции, classloader, `XposedBridge`, `/data/adb/lspd`, artefacts в maps |
-| `hook.native` | Инлайн-хуки: проверка пролога `open/read/dlopen` в `libc` на `br/b/ldr` патчи, PLT/GOT аномалии, чужие RX-регионы без файла |
-| `debug.tracer` | `TracerPid != 0`, `ptrace(PTRACE_TRACEME)` self-attach тест, seccomp-режим, `/proc/self/status` |
-| `debug.adb` | ADB enabled, Developer options, USB-debugging, mock location, `adb_wifi_enabled`, `ro.adb.secure=0` |
+| `hook.frida` | Файлы frida-server, строки в памяти, native-обзор маппингов, порты 27042/27043 в `/proc/net/tcp`, подозрительные потоки (`gmain`, `gum-js-loop`) |
+| `hook.xposed` | Загружаемые Xposed/LSPosed классы, файлы фреймворка, следы в stack trace, хук-библиотеки в маппингах, `ro.xposed` свойства |
+| `hook.native` | Inline-хуки в прологах функций libc, анонимные rwx-регионы, `(deleted)` маппинги, чужие `.so` в адресном пространстве |
 
-### 4. Integrity
-- Подпись APK (SHA-256 сертификата) vs эталон;
-- `FLAG_DEBUGGABLE`, отладчик подключён/ждёт;
-- installer package (Play / sideload / unknown);
-- переупаковка: CRC dex/native-либ, чужие `.so` в `nativeLibraryDir`;
-- `Build.getSerial`/props подменены;
-- работа под другим UID / shared user id.
-
----
-
-## 🧮 Модель скоринга
-
-Каждый сигнал:
-
-```
-score = severity.weight × confidence / 100
-severity: INFO(0) LOW(8) MEDIUM(18) HIGH(32) CRITICAL(55)
-```
-
-Скоры складываются в 4 бакета — **root / virtual / hook / integrity** — и нормируются 0..100.
-
-Вердикт:
-
-| Total | Verdict |
+### Integrity (3 проба)
+| ID | Что делает |
 |---|---|
-| 0–14 | `CLEAN` |
-| 15–34 | `SUSPICIOUS` |
-| 35–64 | `COMPROMISED` |
-| 65–100 | `HOSTILE` |
-
-Вердикт также форсится до `HOSTILE`, если сработал любой `CRITICAL` сигнал с confidence ≥ 90 (например, живой Magisk-сокет или активный Frida).
+| `debug.tracer` | `TracerPid`, JDWP, `ptrace(PTRACE_TRACEME)` self-test, режим seccomp |
+| `debug.adb` | ADB включён, режим разработчика, mock location, `ro.adb.secure`, ADB по TCP |
+| `integrity.app` | Флаг `debuggable`, SHA-256 подписи, installer package, посторонние native-библиотеки, расположение APK |
 
 ---
 
-## 🏗 Архитектура
+## Как считается вердикт
+
+Каждый сигнал имеет вес (`INFO 0`, `LOW 8`, `MEDIUM 18`, `HIGH 32`, `CRITICAL 55`) и уверенность 0–100 %.
 
 ```
-app/src/main/java/dev/vroot/checker/
-├── core/
-│   ├── model/Models.kt        # Signal, Severity, Category, Verdict, отчёты
-│   ├── Probe.kt               # интерфейс пробы + ProbeContext
-│   ├── ProbeContext.kt        # общий кэш: props, mounts, maps, cpuinfo, packages
-│   ├── DetectorEngine.kt      # параллельный запуск, таймауты, агрегация, скоринг
-│   └── util/                  # Sys, Props, Shell, Maps, Pkg, NativeBridge
-├── probes/                    # 20 проб (root.*, virt.*, hook.*, debug.*, integrity.*)
-├── report/JsonReport.kt       # экспорт отчёта в JSON
-└── ui/                        # Compose UI: вердикт, бары по категориям, дерево сигналов
-app/src/main/cpp/vroot_native.c # JNI: faccessat/stat/openat напрямую, maps, TracerPid, хук-чек
+score = Σ (вес × уверенность / 100)
+normalized = 100 × (1 − e^(−score / 70))
 ```
 
-Принципы:
+| Нормализованный балл | Вердикт |
+|---|---|
+| < 15 | **Clean** — признаков не найдено |
+| 15–35 | **Suspicious** — есть отдельные аномалии |
+| 35–65 | **Compromised** — среда изменена |
+| > 65 | **Hostile** — активное вмешательство |
 
-1. **Многоканальность.** Один и тот же факт проверяется 2–4 разными способами (Java API → shell → нативный syscall). Если каналы расходятся — это само по себе сигнал (`*.mismatch`), потому что расхождение = кто-то врёт.
-2. **Никаких падений.** Каждая проба изолирована: исключение превращается в `failed`-пробу, а не в краш.
-3. **Параллельно и с таймаутом.** Все пробы едут в `Dispatchers.IO` через `coroutineScope`, каждая с персональным таймаутом (по умолчанию 1500 мс).
-4. **Кэш общий.** `/proc/self/maps`, `/proc/mounts`, `cpuinfo`, список пакетов читаются один раз на скан.
-5. **Evidence-first.** Каждый сработавший сигнал обязан приложить, что именно нашёл.
+Любой `CRITICAL` сигнал с уверенностью ≥ 90 % принудительно даёт вердикт **Hostile** (в отчёте видно поле `forcedBy`).
 
 ---
 
-## 🚀 Использование как библиотеки
+## Лог и объяснения
 
-```kotlin
-val report = DetectorEngine(context).scan()
+Лог пишется по ходу сканирования с уровнями `TRC / INF / HIT / OK / WRN / ERR`, таймингом от старта и раскрываемыми деталями:
 
-when (report.verdict) {
-    Verdict.CLEAN       -> allow()
-    Verdict.SUSPICIOUS  -> stepUpAuth()
-    Verdict.COMPROMISED,
-    Verdict.HOSTILE     -> block(report.topSignals(5))
-}
-
-Log.d("vroot", JsonReport.toJson(report))
+```
+[HIT] 00.412s root.binaries  su_path /system/xbin/su
+      Почему: бинарник su доступен — на стоковой прошивке его нет
+      Метод: File.exists() + native access(F_OK)
+      Вес: CRITICAL · уверенность 100% · вклад 55
+      Улики:
+        • path = /system/xbin/su
+        • java = true
+        • native = true
 ```
 
-Точечно:
-
-```kotlin
-val engine = DetectorEngine(context, config = EngineConfig(
-    probeTimeoutMs = 2500,
-    enabledCategories = setOf(Category.ROOT, Category.HOOKING),
-    allowShell = false           // полностью без exec(), только File + JNI
-))
-```
+На вкладке **Лог** есть поиск по тексту и фильтры по уровням.
 
 ---
 
-## 🔨 Сборка
+## Экспорт
+
+Кнопка экспорта открывает нижнюю панель с отдельными действиями для каждого формата:
+
+| Формат | Буфер | Поделиться | Сохранить |
+|---|---|---|---|
+| JSON (schema v1) | ✓ | `.json` через FileProvider | ✓ в Downloads |
+| Markdown | ✓ | `.md` через FileProvider | ✓ в Downloads |
+| Только лог | ✓ | — | — |
+
+Имя файла: `vroot-<model>-<yyyyMMdd-HHmmss>.<ext>`.
+
+В отчёт входят: вердикт и баллы по корзинам, отпечаток устройства, все пробы с таймингами, каждый сработавший сигнал с уликами и полный лог.
+
+---
+
+## Архитектура
+
+```
+app/src/main/
+  cpp/                    JNI: access(), чтение /proc, свойства, ptrace, скан маппингов, inline-hook check
+  java/dev/vroot/checker/
+    core/                 движок, модели, лог, утилиты (Sys, Props, Shell, ProcMaps, Pkg, NativeBridge)
+    probes/               18 пробов + сигнатуры + каталог
+    report/               JSON, Markdown, Exporter (буфер/share/Downloads)
+    ui/                   Compose UI: Dashboard, Log, About
+  res/drawable/           единый набор vector-иконок
+```
+
+Каждый проб изолирован: свой таймаут (по умолчанию 1800 мс), ошибка или таймаут одного проба не ломает скан — это видно в отчёте.
+
+---
+
+## Сборка
+
+Требования: JDK 17, Android SDK 35, NDK + CMake 3.22.1, Gradle 8.11.1 (AGP 8.9.1, Kotlin 2.1.20), minSdk 26.
 
 ```bash
-git clone https://github.com/lineusering-code/vroot-checker
+git clone https://github.com/lineusering-code/vroot-checker.git
 cd vroot-checker
-gradle wrapper --gradle-version 8.9   # wrapper-jar не хранится в репо
+gradle wrapper --gradle-version 8.11.1   # если нет gradlew в репо
 ./gradlew assembleDebug
 ```
 
-Требования: JDK 17, Android SDK 35, NDK 26+, CMake 3.22+.
+APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ---
 
-## ⚠️ Дисклеймер
+## Ограничения
 
-Проект предназначен для **защиты собственных приложений** (антифрод, банкинг, античит, лицензирование) и для исследований безопасности на своих устройствах. Абсолютной детекции не существует: достаточно мотивированный атакующий с кастомным ядром обойдёт любой user-space чек. Используйте Vroot Checker как **сигнал риска**, а не как единственный барьер, и всегда комбинируйте с серверной проверкой (Play Integrity API / собственная аттестация).
+Детект работает в user-space, поэтому против агрессивных скрывателей (Zygisk + Shamiko + денай-лист) часть проверок может молчать. Именно поэтому сделаны перекрёстные проверки (Java против native, mounts против mountinfo, свойства против `__system_property_get`) — расхождение само по себе является сигналом.
+
+Инструмент — для диагностики своих устройств и исследований безопасности.
+
+---
+
+## Автор
+
+**lineusering-code** — https://github.com/lineusering-code
+
+Репозиторий: https://github.com/lineusering-code/vroot-checker  
+Баги и идеи: https://github.com/lineusering-code/vroot-checker/issues
 
 Лицензия: MIT.
