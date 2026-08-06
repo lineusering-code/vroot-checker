@@ -2,6 +2,7 @@ package dev.vroot.checker.probes
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.os.Build
 import dev.vroot.checker.core.BaseProbe
 import dev.vroot.checker.core.ProbeContext
@@ -38,12 +39,13 @@ class AppIntegrityProbe : BaseProbe() {
         )
 
         val sha = runCatching {
-            val sigs: Array<android.content.pm.Signature> =
+            val sigs: List<Signature> =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val info = pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES)
-                    info.signingInfo?.apkContentsSigners.orEmpty()
+                    info.signingInfo?.apkContentsSigners?.filterNotNull().orEmpty()
                 } else {
-                    pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES).signatures.orEmpty()
+                    pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES)
+                        .signatures?.filterNotNull().orEmpty()
                 }
             sigs.firstOrNull()?.let { s ->
                 MessageDigest.getInstance("SHA-256").digest(s.toByteArray())
