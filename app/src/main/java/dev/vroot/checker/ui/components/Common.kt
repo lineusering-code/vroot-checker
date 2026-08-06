@@ -3,12 +3,13 @@ package dev.vroot.checker.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,6 +20,8 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +37,7 @@ import dev.vroot.checker.ui.theme.accent
 /**
  * Иконка по имени vector drawable — категории хранят имя иконки строкой,
  * чтобы добавление новой пробы не требовало правки UI.
+ * Если ресурс не найден — подставляется ic_info.
  */
 @Composable
 fun NamedIcon(
@@ -43,19 +47,17 @@ fun NamedIcon(
     tint: Color = LocalContentColor.current,
 ) {
     val context = LocalContext.current
-    val id = remember2(name) {
-        context.resources.getIdentifier(name, "drawable", context.packageName)
+    val id = remember(name) {
+        val resolved = context.resources.getIdentifier(name, "drawable", context.packageName)
+        if (resolved != 0) resolved else R.drawable.ic_info
     }
     Icon(
-        painter = painterResource(id = if (id != 0) id else R.drawable.ic_info),
+        painter = painterResource(id = id),
         contentDescription = contentDescription,
         modifier = modifier,
         tint = tint,
     )
 }
-
-@Composable
-private fun <T> remember2(key: Any?, calc: () -> T): T = androidx.compose.runtime.remember(key) { calc() }
 
 /** Горизонтальная шкала риска 0..100 с плавной анимацией. */
 @Composable
@@ -66,7 +68,7 @@ fun ScoreBar(
     height: Int = 8,
 ) {
     val fraction by animateFloatAsState(
-        targetValue = (value.coerceIn(0, 100)) / 100f,
+        targetValue = value.coerceIn(0, 100) / 100f,
         label = "score",
     )
     Box(
@@ -104,9 +106,13 @@ fun SeverityChip(severity: Severity, modifier: Modifier = Modifier) {
     }
 }
 
-/** Серая подпись-метка для технических значений. */
+/** Моноширинный технический текст. */
 @Composable
-fun MonoText(text: String, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+fun MonoText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
     Text(text = text, style = MonoStyle, color = color, modifier = modifier)
 }
 
@@ -126,15 +132,24 @@ fun KeyValueRow(key: String, value: String, modifier: Modifier = Modifier) {
             modifier = Modifier.width(120.dp),
         )
         Spacer(Modifier.width(8.dp))
-        MonoText(text = value, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
+        MonoText(
+            text = value,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
 /** Заглушка для пустых списков. */
 @Composable
 fun EmptyState(icon: String, title: String, subtitle: String, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-        androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             NamedIcon(
                 name = icon,
                 modifier = Modifier.size(48.dp),
