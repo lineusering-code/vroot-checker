@@ -19,17 +19,17 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicInteger
 
-/** Прогресс сканирования для UI. */
+/** Scan progress for the UI. */
 data class ScanProgress(val done: Int, val total: Int, val current: String) {
     val fraction: Float get() = if (total == 0) 0f else done.toFloat() / total.toFloat()
 }
 
 /**
- * Движок диагностики.
+ * The diagnostics engine.
  *
- * Все пробы выполняются параллельно в [Dispatchers.IO], каждая под своим
- * тайм-аутом и в своём try/catch: одна упавшая проба не роняет скан,
- * а превращается в failed-запись отчёта.
+ * Every probe runs in parallel on [Dispatchers.IO], each with its own timeout
+ * and its own try/catch, so one broken probe degrades into a failed report
+ * entry instead of taking the whole scan down.
  */
 class DetectorEngine(
     private val app: Context,
@@ -43,11 +43,13 @@ class DetectorEngine(
             val ctx = ProbeContext(app, log, config)
 
             val probes = ProbeCatalog.all().filter { it.category.bucket in config.enabledBuckets }
-            log.info("engine", "Старт диагностики Vroot Checker", buildString {
-                append("Проб к выполнению: ").append(probes.size)
-                append("\nНативный слой: ").append(if (NativeBridge.available) "загружен (libvroot.so)" else "НЕДОСТУПЕН — часть чеков пропущена")
-                append("\nshell разрешён: ").append(config.allowShell)
-                append("\nКорзины: ").append(config.enabledBuckets.joinToString { it.title })
+            log.info("engine", "Vroot Checker diagnostics started", buildString {
+                append("Probes queued: ").append(probes.size)
+                append("\nNative layer: ").append(
+                    if (NativeBridge.available) "loaded (libvroot.so)" else "UNAVAILABLE - some checks are skipped"
+                )
+                append("\nShell allowed: ").append(config.allowShell)
+                append("\nBuckets: ").append(config.enabledBuckets.joinToString { it.title })
             })
 
             val done = AtomicInteger(0)
@@ -68,7 +70,7 @@ class DetectorEngine(
 
     private suspend fun runProbe(probe: Probe, ctx: ProbeContext, log: ScanLog): ProbeReport {
         val t0 = System.currentTimeMillis()
-        log.trace(probe.id, "→ проба «" + probe.displayName + "» запущена")
+        log.trace(probe.id, "-> probe \"" + probe.displayName + "\" started")
         var timedOut = false
         var error: String? = null
 
@@ -77,12 +79,12 @@ class DetectorEngine(
                 probe.run(ctx)
             } ?: run {
                 timedOut = true
-                log.warn(probe.id, "Тайм-аут пробы (" + probe.timeoutMs + " мс) — результат не учитывается")
+                log.warn(probe.id, "Probe timed out after " + probe.timeoutMs + " ms - result discarded")
                 emptyList()
             }
         } catch (t: Throwable) {
-            error = t.javaClass.simpleName + ": " + (t.message ?: "нет описания")
-            log.error(probe.id, "Проба упала: " + error)
+            error = t.javaClass.simpleName + ": " + (t.message ?: "no description")
+            log.error(probe.id, "Probe crashed: " + error)
             emptyList()
         }
 
@@ -96,7 +98,7 @@ class DetectorEngine(
         val hits = stamped.count { it.triggered }
         log.trace(
             probe.id,
-            "← проба завершена за " + elapsed + " мс: срабатываний " + hits + " из " + stamped.size
+            "<- probe finished in " + elapsed + " ms: " + hits + " of " + stamped.size + " checks triggered"
         )
 
         return ProbeReport(
@@ -127,14 +129,11 @@ class DetectorEngine(
             )
         }
 
-        // Итог — не среднее, а «худшая корзина + затухающий вклад остальных»:
-        // один жёсткий root важнее трёх мелких косвенных признаков эмулятора.
+        // The total is not an average but "worst bucket plus a decaying share of
+        // the rest": one hard root finding outweighs three weak emulator hints.
         val sorted = buckets.map { it.normalized }.sortedDescending()
         val total = sorted.foldIndexed(0.0) { i, acc, v -> acc + v * (1.0 / (1 shl i)) }
             .toInt().coerceIn(0, 100)
-
-        val hardHit = reports.flatMap { it.signals }
-            .firstOrNull { it.triggered && it.severity == Severity.CRITICAL && it.confidence >= 90 }
 
         val baseVerdict = when {
             total >= 65 -> Verdict.HOSTILE
@@ -142,17 +141,39 @@ class DetectorEngine(
             total >= 15 -> Verdict.SUSPICIOUS
             else -> Verdict.CLEAN
         }
-        val verdict = if (hardHit != null && baseVerdict.ordinal < Verdict.HOSTILE.ordinal) Verdict.HOSTILE else baseVerdict
+
+        // A single CRITICAL signal is not allowed to override the score on its
+        // own: one false positive would then be enough to condemn a clean
+        // device. Overriding requires either two independent critical findings
+        // or one critical finding on top of an already elevated score.
+        val hardHits = reports.flatMap { it.signals }
+            .filter { it.triggered && it.severity == Severity.CRITICAL && it.confidence >= 90 }
+        val hardProbes = hardHits.map { it.id.substringBeforeLast('.') }.distinct()
+        val corroborated = (hardHits.size >= 2 && hardProbes.size >= 2) ||
+            (hardHits.isNotEmpty() && total >= 35)
+
+        val forcedBy = if (corroborated && baseVerdict.ordinal < Verdict.HOSTILE.ordinal) {
+            hardHits.joinToString(", ") { it.id }
+        } else {
+            null
+        }
+        val verdict = if (forcedBy != null) Verdict.HOSTILE else baseVerdict
 
         val elapsed = System.currentTimeMillis() - startedAt
         val failed = reports.count { it.failed }
 
-        log.info("engine", "Вердикт: " + verdict.title + " (" + total + "/100)", buildString {
-            buckets.forEach { append(it.bucket.title).append(": ").append(it.normalized).append("/100 (срабатываний ").append(it.hits).append(")\n") }
-            append("Проверок выполнено: ").append(reports.sumOf { it.signals.size })
-            append("\nПроб с ошибкой/тайм-аутом: ").append(failed)
-            append("\nВремя: ").append(elapsed).append(" мс")
-            if (hardHit != null) append("\nВердикт форсирован критическим сигналом: ").append(hardHit.id)
+        log.info("engine", "Verdict: " + verdict.title + " (" + total + "/100)", buildString {
+            buckets.forEach {
+                append(it.bucket.title).append(": ").append(it.normalized)
+                    .append("/100 (").append(it.hits).append(" hits)\n")
+            }
+            append("Checks performed: ").append(reports.sumOf { it.signals.size })
+            append("\nProbes failed or timed out: ").append(failed)
+            append("\nElapsed: ").append(elapsed).append(" ms")
+            if (hardHits.isNotEmpty()) {
+                append("\nCritical findings: ").append(hardHits.joinToString { it.id })
+                append("\nVerdict forced: ").append(if (forcedBy != null) "yes" else "no, not corroborated")
+            }
         })
 
         return DiagnosticsReport(
@@ -164,11 +185,11 @@ class DetectorEngine(
             startedAt = startedAt,
             elapsedMs = elapsed,
             log = log.snapshot(),
-            forcedBy = hardHit?.id,
+            forcedBy = forcedBy,
         )
     }
 
-    /** Мягкое насыщение: 0→0, 55→~50, 150→~85, дальше почти плато. */
+    /** Soft saturation: 0->0, 55->~50, 150->~85, near-plateau beyond that. */
     private fun normalize(raw: Int): Int {
         if (raw <= 0) return 0
         val r = raw.toDouble()
