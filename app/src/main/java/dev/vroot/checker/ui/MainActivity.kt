@@ -174,7 +174,7 @@ private fun VrootShell(vm: ScanViewModel, state: ScanUiState) {
                     onDisableAll = vm::disableAllProbes,
                 )
 
-                Tab.ABOUT -> AboutScreen()
+                Tab.ABOUT -> AboutScreen(lang = state.lang)
             }
         }
     }

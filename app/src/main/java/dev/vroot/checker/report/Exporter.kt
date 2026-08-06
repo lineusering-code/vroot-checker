@@ -141,7 +141,7 @@ object Exporter {
                 About.APP_NAME + " - " + Tr.verdictTitle(lang, report.verdict) +
                     " (" + report.totalScore + "/100)",
             )
-            putExtra(Intent.EXTRA_TEXT, About.exportFooter)
+            putExtra(Intent.EXTRA_TEXT, About.exportFooter(lang))
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         val chooser = Intent.createChooser(intent, s.export)

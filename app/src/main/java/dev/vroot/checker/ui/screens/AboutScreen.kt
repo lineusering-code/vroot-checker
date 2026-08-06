@@ -22,15 +22,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import dev.vroot.checker.About
+import dev.vroot.checker.core.i18n.Lang
+import dev.vroot.checker.core.i18n.Tr
 import dev.vroot.checker.core.model.Category
 import dev.vroot.checker.ui.components.KeyValueRow
 import dev.vroot.checker.ui.components.MonoText
 import dev.vroot.checker.ui.components.NamedIcon
 
-/** О приложении: автор, репозиторий, лицензия и состав движка. */
+/**
+ * About: author, repository, license and what the engine actually covers.
+ *
+ * The scoring card states the real rules rather than a simplified version -
+ * a diagnostics tool that hides its own maths is not much better than a
+ * boolean.
+ */
 @Composable
-fun AboutScreen(modifier: Modifier = Modifier) {
+fun AboutScreen(lang: Lang = Lang.DEFAULT, modifier: Modifier = Modifier) {
     val uri = LocalUriHandler.current
+    val s = Tr.strings(lang)
 
     Column(
         modifier = modifier
@@ -51,32 +60,32 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                     Column {
                         Text(About.APP_NAME, style = MaterialTheme.typography.headlineLarge)
                         Text(
-                            "v" + About.VERSION + " · лицензия " + About.LICENSE,
+                            "v" + About.VERSION + " \u00b7 " + s.aboutLicense + " " + About.LICENSE,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text(About.TAGLINE, style = MaterialTheme.typography.bodyMedium)
+                Text(s.tagline, style = MaterialTheme.typography.bodyMedium)
             }
         }
 
         Card {
             Column(Modifier.padding(vertical = 6.dp)) {
-                LinkRow("ic_github", "Репозиторий на GitHub", About.REPO_NAME) { uri.openUri(About.REPO_URL) }
+                LinkRow("ic_github", s.aboutGithub, About.REPO_NAME) { uri.openUri(About.REPO_URL) }
                 HorizontalDivider()
-                LinkRow("ic_person", "Автор", About.AUTHOR) { uri.openUri(About.AUTHOR_URL) }
+                LinkRow("ic_person", s.aboutAuthor, About.AUTHOR) { uri.openUri(About.AUTHOR_URL) }
                 HorizontalDivider()
-                LinkRow("ic_bug", "Сообщить об ошибке", "GitHub Issues") { uri.openUri(About.ISSUES_URL) }
+                LinkRow("ic_bug", s.aboutIssues, "GitHub Issues") { uri.openUri(About.ISSUES_URL) }
                 HorizontalDivider()
-                LinkRow("ic_download", "Релизы и APK", "Releases") { uri.openUri(About.RELEASES_URL) }
+                LinkRow("ic_download", s.aboutReleases, "Releases") { uri.openUri(About.RELEASES_URL) }
             }
         }
 
         Card {
             Column(Modifier.padding(16.dp)) {
-                Text("Что проверяет движок", style = MaterialTheme.typography.titleMedium)
+                Text(s.riskByCategory, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))
                 Category.entries.forEach { c ->
                     Row(
@@ -85,8 +94,12 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                     ) {
                         NamedIcon(c.icon, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
-                        Text(c.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        MonoText(c.bucket.title)
+                        Text(
+                            Tr.category(lang, c),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MonoText(Tr.bucket(lang, c.bucket))
                     }
                 }
             }
@@ -94,18 +107,20 @@ fun AboutScreen(modifier: Modifier = Modifier) {
 
         Card {
             Column(Modifier.padding(16.dp)) {
-                Text("Как считается риск", style = MaterialTheme.typography.titleMedium)
+                Text(s.overallRisk, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                KeyValueRow("Вес сигнала", "severity × confidence / 100")
-                KeyValueRow("Корзина", "100 × (1 − e^(−raw/70))")
-                KeyValueRow("Итог", "худшая корзина + затухающий вклад остальных")
-                KeyValueRow("Пороги", "15 / 35 / 65 → SUSPICIOUS / COMPROMISED / HOSTILE")
-                KeyValueRow("Форс", "любой CRITICAL с уверенностью ≥ 90% → HOSTILE")
+                // Formulas are language-neutral on purpose: they are the same in
+                // every locale and easier to verify against the engine source.
+                KeyValueRow(s.weight, "severity \u00d7 confidence / 100")
+                KeyValueRow(s.bucket, "100 \u00d7 (1 \u2212 e^(\u2212raw/70))")
+                KeyValueRow(s.overallRisk, "max(bucket) + \u03a3 v\u1d62 / 2\u2071")
+                KeyValueRow(s.verdict, "15 / 35 / 65 \u2192 SUSPICIOUS / COMPROMISED / HOSTILE")
+                KeyValueRow(s.forcedUp, "2 \u00d7 CRITICAL (conf \u2265 90) or 1 \u00d7 CRITICAL + score \u2265 35")
             }
         }
 
         Text(
-            About.exportFooter,
+            About.exportFooter(lang),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline,
         )
