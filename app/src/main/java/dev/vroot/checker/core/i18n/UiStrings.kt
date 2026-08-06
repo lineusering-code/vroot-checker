@@ -9,6 +9,9 @@ package dev.vroot.checker.core.i18n
  *
  * Report chrome lives here too, because the Markdown export has to be
  * renderable in a language the device is not currently running in.
+ *
+ * Format placeholders are written as %1\$d: an unescaped $ would be parsed by
+ * Kotlin as a string template instead of reaching String.format.
  */
 data class UiStrings(
     // Navigation and shell
@@ -139,13 +142,13 @@ data class UiStrings(
             btnRescan = "Scan again",
             btnCancel = "Cancel",
             scanning = "Scanning",
-            scanProgress = "%1$d of %2$d",
+            scanProgress = "%1\$d of %2\$d",
             noReportYet = "No scan yet",
             noReportHint = "Run the diagnostics to see what this device looks like from the inside.",
 
             verdict = "Verdict",
             overallRisk = "Overall risk",
-            checksTriggered = "%1$d of %2$d checks triggered",
+            checksTriggered = "%1\$d of %2\$d checks triggered",
             scanStarted = "Scan",
             forcedUp = "Verdict raised by a critical finding",
             elapsed = "Elapsed",
@@ -186,7 +189,7 @@ data class UiStrings(
             noData = "No data.",
             statusTimeout = "timed out",
             statusError = "failed",
-            statusTriggered = "%1$d triggered",
+            statusTriggered = "%1\$d triggered",
             statusClean = "clean",
             executionError = "Execution error",
             colCheck = "Check",
@@ -224,7 +227,7 @@ data class UiStrings(
             settingsChecksHint = "Disabled checks are skipped entirely and do not affect the score.",
             enableAll = "Enable all",
             disableAll = "Disable all",
-            checksEnabledOf = "%1$d of %2$d enabled",
+            checksEnabledOf = "%1\$d of %2\$d enabled",
             checkDisabled = "disabled",
 
             reportTitleSuffix = "diagnostics report",
