@@ -9,10 +9,10 @@ import dev.vroot.checker.core.util.NativeBridge
 import dev.vroot.checker.core.util.Sys
 import java.io.File
 
-/** Frida: файлы сервера, порты, библиотеки в памяти и характерные потоки. */
+/** Frida: server files, default ports, libraries mapped in, and telltale threads. */
 class FridaProbe : BaseProbe() {
     override val id = "hook.frida"
-    override val displayName = "Frida и динамическая инструментация"
+    override val displayName = "Frida and dynamic instrumentation"
     override val category = Category.DYNAMIC_ANALYSIS
     override val timeoutMs = 2500L
 
@@ -22,11 +22,11 @@ class FridaProbe : BaseProbe() {
         val files = Sys.probeAll(Signatures.FRIDA_PATHS).filter { it.exists }
         out += signal(
             id = "server_files",
-            title = "Файлы frida-server / gadget на диске",
+            title = "frida-server / gadget files on disk",
             triggered = files.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 90,
-            why = "frida-server обычно кладут в /data/local/tmp. Сам факт наличия говорит, что устройство готовили к реверсу.",
+            why = "frida-server is usually dropped into /data/local/tmp. Its mere presence says the device was prepared for reverse engineering.",
             method = "java.io.File + faccessat(JNI)",
             evidence = files.map { ev(it.path, it.describe()) },
         )
@@ -37,11 +37,11 @@ class FridaProbe : BaseProbe() {
         }
         out += signal(
             id = "frida_in_memory",
-            title = "Frida-библиотеки внутри процесса",
+            title = "Frida libraries inside this process",
             triggered = mapsHits.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 100,
-            why = "Агент Frida уже внутри нашего адресного пространства: любой метод может быть перехвачен прямо сейчас.",
+            why = "The Frida agent is already inside our address space: any method can be intercepted right now.",
             method = "procfs: /proc/self/maps",
             evidence = mapsHits.take(8).map { ev("region", it.path) },
         )
@@ -49,11 +49,11 @@ class FridaProbe : BaseProbe() {
         val nativeHits = NativeBridge.mapsScan(listOf("frida", "gadget", "gum-js", "linjector"))
         out += signal(
             id = "frida_native_view",
-            title = "Нативный скан памяти видит Frida",
+            title = "The native memory scan sees Frida",
             triggered = nativeHits.isNotEmpty() && mapsHits.isEmpty(),
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Нативное чтение maps нашло агента, а Java-чтение — нет. Значит, чтение процфс из Java уже перехвачено.",
+            why = "A native read of maps found the agent while the Java read did not, which means procfs reads from Java are already being intercepted.",
             method = "jni: raw openat(/proc/self/maps)",
             evidence = nativeHits.take(6).map { ev("line", it.takeLast(90)) },
         )
@@ -63,11 +63,11 @@ class FridaProbe : BaseProbe() {
         }.take(5).toList()
         out += signal(
             id = "frida_ports",
-            title = "Открыт стандартный порт Frida (27042/27043)",
+            title = "A default Frida port is open (27042/27043)",
             triggered = ports.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 90,
-            why = "frida-server по умолчанию слушает 27042. Порт виден в /proc/net/tcp без всяких разрешений.",
+            why = "frida-server listens on 27042 by default, and the port is visible in /proc/net/tcp without any permission.",
             method = "procfs: /proc/net/tcp",
             evidence = ports.map { ev("socket", it.trim().take(90)) },
         )
@@ -83,11 +83,11 @@ class FridaProbe : BaseProbe() {
         }
         out += signal(
             id = "frida_threads",
-            title = "Потоки с именами Frida/GLib",
+            title = "Threads named after Frida/GLib internals",
             triggered = badThreads.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 92,
-            why = "gmain, gdbus и gum-js-loop — служебные потоки frida-gum. В обычном Android-приложении их не бывает.",
+            why = "gmain, gdbus and gum-js-loop are frida-gum worker threads. An ordinary Android app never has them.",
             method = "procfs: /proc/self/task/*/comm",
             evidence = badThreads.take(10).map { ev("thread", it) },
         )

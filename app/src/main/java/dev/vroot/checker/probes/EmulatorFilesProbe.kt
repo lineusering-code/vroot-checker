@@ -7,10 +7,10 @@ import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Signal
 import dev.vroot.checker.core.util.Sys
 
-/** Файловые артефакты QEMU / goldfish / VirtualBox / коммерческих эмуляторов. */
+/** File artifacts left by QEMU / goldfish / VirtualBox / commercial emulators. */
 class EmulatorFilesProbe : BaseProbe() {
     override val id = "virt.emulator"
-    override val displayName = "Файловые маркеры эмулятора"
+    override val displayName = "Emulator file markers"
     override val category = Category.EMULATOR
 
     override suspend fun run(ctx: ProbeContext): List<Signal> {
@@ -19,11 +19,11 @@ class EmulatorFilesProbe : BaseProbe() {
         val found = Sys.probeAll(Signatures.EMULATOR_FILES).filter { it.exists }
         out += signal(
             id = "emulator_files",
-            title = "Файлы эмулятора на диске",
+            title = "Emulator files on disk",
             triggered = found.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 92,
-            why = "qemu_pipe, goldfish/ranchu init-скрипты, vbox-устройства и фирменные бинарники эмуляторов на реальном телефоне не существуют.",
+            why = "qemu_pipe, goldfish/ranchu init scripts, vbox devices and vendor emulator binaries do not exist on a real phone.",
             method = "java.io.File + faccessat(JNI)",
             evidence = found.map { ev(it.path, it.describe()) },
         )
@@ -31,11 +31,11 @@ class EmulatorFilesProbe : BaseProbe() {
         val goldfishTty = ctx.ttyDrivers.contains("goldfish", true)
         out += signal(
             id = "goldfish_tty",
-            title = "Драйвер goldfish в /proc/tty/drivers",
+            title = "goldfish driver in /proc/tty/drivers",
             triggered = goldfishTty,
             severity = Severity.HIGH,
             confidence = 95,
-            why = "goldfish — это виртуальная платформа Android Emulator. Её tty-драйвер не встречается на физическом железе.",
+            why = "goldfish is the Android Emulator's virtual platform. Its tty driver is never present on physical hardware.",
             method = "procfs: /proc/tty/drivers",
             evidence = listOf(ev("drivers", ctx.ttyDrivers.lineSequence().firstOrNull { it.contains("goldfish", true) } ?: "")),
         )
@@ -44,11 +44,11 @@ class EmulatorFilesProbe : BaseProbe() {
             .map { it to ctx.prop(it) }.filter { it.second.isNotEmpty() }
         out += signal(
             id = "qemu_props",
-            title = "QEMU-свойства системы",
+            title = "QEMU system properties",
             triggered = qemuProps.any { it.first.startsWith("ro.") && it.second == "1" } || qemuProps.size >= 2,
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Свойства ro.kernel.qemu и qemu.* выставляет сам эмулятор при загрузке системы.",
+            why = "ro.kernel.qemu and the qemu.* properties are set by the emulator itself while the system boots.",
             method = "SystemProperties",
             evidence = qemuProps.map { ev(it.first, it.second) },
         )
@@ -57,11 +57,11 @@ class EmulatorFilesProbe : BaseProbe() {
         val kernelHit = listOf("goldfish", "ranchu", "microsoft", "virtualbox", "qemu").filter { kernel.contains(it, true) }
         out += signal(
             id = "kernel_banner",
-            title = "Виртуальная платформа в баннере ядра",
+            title = "Virtual platform named in the kernel banner",
             triggered = kernelHit.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 90,
-            why = "Строка версии ядра содержит имя виртуальной платформы, а не вендора SoC.",
+            why = "The kernel version string names a virtual platform instead of the SoC vendor.",
             method = "procfs: /proc/version",
             evidence = listOf(ev("version", kernel.trim().take(160))) + kernelHit.map { ev("token", it) },
         )
