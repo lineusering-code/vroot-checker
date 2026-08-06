@@ -14,12 +14,14 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/ptrace.h>
 #include <sys/prctl.h>
+#include <sys/wait.h>
 #include <sys/system_properties.h>
 
 #define EXPORT __attribute__((visibility("default")))
@@ -34,6 +36,20 @@ static int raw_faccessat(const char *path) {
     return (int) syscall(SYS_faccessat, AT_FDCWD, path, F_OK, 0);
 #else
     return access(path, F_OK);
+#endif
+}
+
+/*
+ * Номер stat-вызова зависит от ABI: на arm64/x86_64 ядро знает только
+ * newfstatat, а у 32-битных это fstatat64 с другой раскладкой struct stat.
+ * Поэтому сырой syscall дёргаем только там, где это безопасно,
+ * иначе берём обёртку libc.
+ */
+static int raw_stat(const char *path, struct stat *st) {
+#if (defined(__aarch64__) || defined(__x86_64__)) && defined(SYS_newfstatat)
+    return (int) syscall(SYS_newfstatat, AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW);
+#else
+    return fstatat(AT_FDCWD, path, st, AT_SYMLINK_NOFOLLOW);
 #endif
 }
 
@@ -56,7 +72,7 @@ CLS(nativeAccess)(JNIEnv *env, jobject thiz, jstring jpath) {
     if (!ok) {
         /* second channel: stat() — иногда access() врёт из-за SELinux */
         struct stat st;
-        ok = (syscall(SYS_fstatat, AT_FDCWD, path, &st, AT_SYMLINK_NOFOLLOW) == 0);
+        ok = (raw_stat(path, &st) == 0);
     }
 
     (*env)->ReleaseStringUTFChars(env, jpath, path);
