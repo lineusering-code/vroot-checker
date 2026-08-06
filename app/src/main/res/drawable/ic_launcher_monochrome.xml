@@ -4,15 +4,36 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M54,17 L81,28.5 V49.5 C81,69.3 69.5,86.5 54,94.3 C38.5,86.5 27,69.3 27,49.5 V28.5 Z M54,24 L74,32.5 V49.5 C74,64.6 65.9,77.6 54,84.6 C42.1,77.6 34,64.6 34,49.5 V32.5 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M48.7,31.5 A14.5,14.5 0,1 0,48.7 60.5 A14.5,14.5 0,1 0,48.7 31.5 M48.7,36.5 A9.5,9.5 0,1 1,48.7 55.5 A9.5,9.5 0,1 1,48.7 36.5" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M57.8,54.2 L77.3,73.7 Q79.2,75.6 77.3,77.5 L75.6,79.2 Q73.7,81.1 71.8,79.2 L52.3,59.7 Z M43.7,39.3 h2.7 v13.4 h-2.7 z M51.1,39.3 h2.7 v13.4 h-2.7 z M40.8,42.7 h15.9 v2.7 h-15.9 z M40.8,48.3 h15.9 v2.7 h-15.9 z" />
+
+    <!--
+      Themed icon. A single tint colour is applied to the whole drawable, so the
+      shield is an outline and the '#' stays solid, otherwise the two shapes
+      would merge into one blob.
+    -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.6667"
+        android:scaleY="0.6667">
+
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6"
+            android:strokeLineJoin="round"
+            android:pathData="M54,27L75,34L75,52C75,66 66,76 54,82C42,76 33,66 33,52L33,34Z" />
+
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M43,47.9L65,47.9L65,51.5L43,51.5Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M43,54.9L65,54.9L65,58.5L43,58.5Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M51.6,44.5L48.9,62L45.4,61.5L48.1,44Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M62.6,44.5L59.9,62L56.4,61.5L59.1,44Z" />
+    </group>
 </vector>

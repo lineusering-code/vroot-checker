@@ -5,27 +5,28 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Shield: security / integrity -->
-    <path
-        android:fillColor="#FFF6FBFF"
-        android:pathData="M54,17 L81,28.5 V49.5 C81,69.3 69.5,86.5 54,94.3 C38.5,86.5 27,69.3 27,49.5 V28.5 Z" />
-    <path
-        android:fillColor="#FFDDF3FF"
-        android:pathData="M54,23.5 L74.7,32.3 V49.5 C74.7,65 66.2,78.4 54,85.6 C41.8,78.4 33.3,65 33.3,49.5 V32.3 Z" />
+    <!-- Shield = protection, '#' = the root shell prompt. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.6667"
+        android:scaleY="0.6667">
 
-    <!-- Magnifier: diagnostics / detection -->
-    <path
-        android:fillColor="#FF0A2540"
-        android:pathData="M48.7,31.5 A14.5,14.5 0,1 0,48.7 60.5 A14.5,14.5 0,1 0,48.7 31.5" />
-    <path
-        android:fillColor="#FFDDF3FF"
-        android:pathData="M48.7,36.5 A9.5,9.5 0,1 0,48.7 55.5 A9.5,9.5 0,1 0,48.7 36.5" />
-    <path
-        android:fillColor="#FF0A2540"
-        android:pathData="M57.8,54.2 L77.3,73.7 Q79.2,75.6 77.3,77.5 L75.6,79.2 Q73.7,81.1 71.8,79.2 L52.3,59.7 Z" />
+        <path
+            android:fillColor="#F6FBFF"
+            android:pathData="M54,27L75,34L75,52C75,66 66,76 54,82C42,76 33,66 33,52L33,34Z" />
 
-    <!-- Hash: root / privileged system access -->
-    <path
-        android:fillColor="#FF1EA7FD"
-        android:pathData="M43.7,39.3 h2.7 v13.4 h-2.7 z M51.1,39.3 h2.7 v13.4 h-2.7 z M40.8,42.7 h15.9 v2.7 h-15.9 z M40.8,48.3 h15.9 v2.7 h-15.9 z" />
+        <path
+            android:fillColor="#0A2540"
+            android:pathData="M41.5,47.7L66.5,47.7L66.5,51.3L41.5,51.3Z" />
+        <path
+            android:fillColor="#0A2540"
+            android:pathData="M41.5,54.7L66.5,54.7L66.5,58.3L41.5,58.3Z" />
+        <path
+            android:fillColor="#0A2540"
+            android:pathData="M51.78,43.27L48.78,63.27L45.22,62.73L48.22,42.73Z" />
+        <path
+            android:fillColor="#0A2540"
+            android:pathData="M62.78,43.27L59.78,63.27L56.22,62.73L59.22,42.73Z" />
+    </group>
 </vector>

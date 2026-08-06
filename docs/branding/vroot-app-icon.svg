@@ -1,13 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="228" fill="#0A2540"/>
-  <circle cx="220" cy="160" r="360" fill="#123E60" opacity="0.65"/>
-  <path d="M512 150 758 255v190c0 180-105 337-246 408-141-71-246-228-246-408V255z" fill="#F6FBFF"/>
-  <path d="M512 210 700 290v155c0 141-77 263-188 328-111-65-188-187-188-328V290z" fill="#DDF3FF"/>
-  <circle cx="470" cy="430" r="132" fill="#0A2540"/>
-  <circle cx="470" cy="430" r="87" fill="#DDF3FF"/>
-  <path d="M554 512 724 682c16 16 16 38 0 54l-15 15c-16 16-38 16-54 0L485 581z" fill="#0A2540"/>
-  <rect x="423" y="365" width="25" height="130" rx="12.5" fill="#1EA7FD"/>
-  <rect x="493" y="365" width="25" height="130" rx="12.5" fill="#1EA7FD"/>
-  <rect x="395" y="397" width="151" height="25" rx="12.5" fill="#1EA7FD"/>
-  <rect x="395" y="451" width="151" height="25" rx="12.5" fill="#1EA7FD"/>
+<!--
+  Vroot Checker launcher icon, master artwork.
+
+  Canvas is the Android adaptive-icon 108dp viewport. The launcher only ever
+  shows the central 72dp and the guaranteed-visible area is the central 66dp
+  circle, so the mark lives inside a group scaled by 0.6667 about the centre.
+
+  Palette:
+    #0A2540  background navy
+    #123E60  accent disc
+    #F6FBFF  shield
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 108 108">
+  <rect width="108" height="108" fill="#0A2540"/>
+  <g transform="translate(54,54) scale(0.6667) translate(-54,-54)">
+    <circle cx="54" cy="54" r="37" fill="#123E60"/>
+    <path d="M54 27 L75 34 L75 52 C75 66 66 76 54 82 C42 76 33 66 33 52 L33 34 Z" fill="#F6FBFF"/>
+    <path d="M41.5 47.7 L66.5 47.7 L66.5 51.3 L41.5 51.3 Z" fill="#0A2540"/>
+    <path d="M41.5 54.7 L66.5 54.7 L66.5 58.3 L41.5 58.3 Z" fill="#0A2540"/>
+    <path d="M51.78 43.27 L48.78 63.27 L45.22 62.73 L48.22 42.73 Z" fill="#0A2540"/>
+    <path d="M62.78 43.27 L59.78 63.27 L56.22 62.73 L59.22 42.73 Z" fill="#0A2540"/>
+  </g>
 </svg>
