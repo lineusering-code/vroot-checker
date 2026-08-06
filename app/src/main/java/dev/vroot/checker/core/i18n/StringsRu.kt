@@ -1,0 +1,113 @@
+package dev.vroot.checker.core.i18n
+
+/**
+ * Russian catalogue.
+ *
+ * Kept in a file of its own so that adding a language is a purely additive
+ * change: nothing outside this file has to be touched.
+ */
+internal val RU_STRINGS = UiStrings(
+    tagline = "Диагностика root, виртуализации и хуков",
+    navDashboard = "Обзор",
+    navLog = "Лог",
+    navAbout = "О программе",
+    navSettings = "Настройки",
+
+    btnScan = "Запустить диагностику",
+    btnRescan = "Сканировать заново",
+    btnCancel = "Отменить",
+    scanning = "Сканирование",
+    scanProgress = "%1$d из %2$d",
+    noReportYet = "Сканирование ещё не запускалось",
+    noReportHint = "Запустите диагностику, чтобы увидеть, как это устройство выглядит изнутри.",
+
+    verdict = "Вердикт",
+    overallRisk = "Итоговый риск",
+    checksTriggered = "сработало %1$d из %2$d проверок",
+    scanStarted = "Скан",
+    forcedUp = "Вердикт повышен критической находкой",
+    elapsed = "Время",
+
+    device = "Устройство",
+    colField = "Поле",
+    colValue = "Значение",
+    devManufacturer = "Производитель",
+    devModel = "Модель",
+    devProductHwBoard = "Product / Hardware / Board",
+    devAndroid = "Android",
+    devBuildTypeTags = "Тип сборки / теги",
+    devAbi = "ABI",
+    devFingerprint = "Fingerprint",
+    devKernel = "Ядро",
+
+    riskByCategory = "Риск по категориям",
+    colBucket = "Корзина",
+    colRisk = "Риск",
+    colScale = "Шкала",
+    colHits = "Сработало",
+
+    keyFindings = "Ключевые находки",
+    nothingTriggered = "Ни одна проверка не сработала.",
+    why = "Почему",
+    method = "Метод",
+    evidence = "Улики",
+    confidence = "уверенность",
+    contribution = "вклад",
+    weight = "Вес",
+    whyItMatters = "почему это важно",
+    colKey = "Ключ",
+
+    perCheckDetails = "Подробности по проверкам",
+    category = "Категория",
+    bucket = "корзина",
+    status = "статус",
+    noData = "Нет данных.",
+    statusTimeout = "тайм-аут",
+    statusError = "ошибка",
+    statusTriggered = "сработало %1$d",
+    statusClean = "чисто",
+    executionError = "Ошибка выполнения",
+    colCheck = "Проверка",
+    colLevel = "Уровень",
+
+    fullLog = "Полный лог сканирования",
+    expandLog = "Развернуть лог",
+    logSearch = "Поиск по логу",
+    logEmpty = "Лог пуст - сначала запустите сканирование",
+    logNoMatches = "Под текущий фильтр ничего не подходит",
+
+    export = "Экспорт отчёта",
+    exportHint = "Полный лог включён в каждый формат.",
+    copyJson = "Скопировать JSON",
+    copyMarkdown = "Скопировать Markdown",
+    copyLog = "Скопировать только лог",
+    shareJson = "Поделиться .json",
+    shareMarkdown = "Поделиться .md",
+    saveJson = "Сохранить .json в Downloads",
+    saveMarkdown = "Сохранить .md в Downloads",
+    copied = "Скопировано в буфер обмена",
+    savedTo = "Сохранено в Downloads",
+    exportFailed = "Не удалось выполнить экспорт",
+
+    aboutGithub = "Репозиторий на GitHub",
+    aboutAuthor = "Автор",
+    aboutIssues = "Сообщить о проблеме",
+    aboutReleases = "Релизы",
+    aboutLicense = "Лицензия",
+    aboutVersion = "Версия",
+
+    settingsLanguage = "Язык",
+    settingsLanguageHint = "Применяется к интерфейсу и к экспортируемым отчётам, независимо от языка системы.",
+    settingsChecks = "Проверки",
+    settingsChecksHint = "Отключённые проверки не выполняются вовсе и не влияют на оценку.",
+    enableAll = "Включить все",
+    disableAll = "Отключить все",
+    checksEnabledOf = "включено %1$d из %2$d",
+    checkDisabled = "отключено",
+
+    reportTitleSuffix = "отчёт диагностики",
+    footerBuiltWith = "Отчёт собран",
+    footerAuthor = "автор",
+    footerLicense = "лицензия",
+    secondsShort = "с",
+)
