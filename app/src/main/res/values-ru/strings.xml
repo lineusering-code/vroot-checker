@@ -1,0 +1,36 @@
+<resources>
+    <!-- Russian locale. The default (English) lives in values/strings.xml. -->
+    <string name="app_name">Vroot Checker</string>
+
+    <!-- Scan -->
+    <string name="scan">Запустить диагностику</string>
+    <string name="rescan">Пересканировать</string>
+    <string name="cancel">Отменить</string>
+    <string name="scanning">Сканирование…</string>
+
+    <!-- Tabs -->
+    <string name="tab_dashboard">Обзор</string>
+    <string name="tab_log">Лог</string>
+    <string name="tab_about">О программе</string>
+
+    <!-- Export -->
+    <string name="export">Экспорт отчёта</string>
+    <string name="copy_json">Скопировать JSON</string>
+    <string name="copy_markdown">Скопировать Markdown</string>
+    <string name="copy_log">Скопировать лог</string>
+    <string name="share_json">Поделиться .json</string>
+    <string name="share_markdown">Поделиться .md</string>
+    <string name="save_json">Сохранить .json в Downloads</string>
+    <string name="save_markdown">Сохранить .md в Downloads</string>
+    <string name="copied">Скопировано в буфер обмена</string>
+
+    <!-- Log -->
+    <string name="log_search">Поиск по логу</string>
+    <string name="log_empty">Лог пуст — запустите диагностику</string>
+
+    <!-- About -->
+    <string name="about_github">Репозиторий на GitHub</string>
+    <string name="about_author">Автор</string>
+    <string name="about_issues">Сообщить о проблеме</string>
+    <string name="about_releases">Релизы</string>
+</resources>
