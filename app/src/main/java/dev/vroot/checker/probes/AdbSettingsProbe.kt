@@ -11,8 +11,9 @@ import dev.vroot.checker.core.model.Signal
 class AdbSettingsProbe : BaseProbe() {
     override val id = "debug.adb"
     override val displayName = "Режим разработчика и ADB"
-    override val category = Category.DEV_SETTINGS
+    override val category = Category.DEBUG
 
+    @Suppress("DEPRECATION")
     override suspend fun run(ctx: ProbeContext): List<Signal> {
         val out = ArrayList<Signal>()
         val cr = ctx.app.contentResolver
@@ -61,7 +62,7 @@ class AdbSettingsProbe : BaseProbe() {
         val secureProp = ctx.prop("ro.secure")
         out += signal(
             id = "adb_secure_prop",
-            title = "Отключёна авторизация ADB",
+            title = "Отключена авторизация ADB",
             triggered = adbSecure == "0" || secureProp == "0",
             severity = Severity.HIGH,
             confidence = 85,

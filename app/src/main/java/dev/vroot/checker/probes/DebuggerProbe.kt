@@ -12,7 +12,7 @@ import dev.vroot.checker.core.util.NativeBridge
 class DebuggerProbe : BaseProbe() {
     override val id = "debug.tracer"
     override val displayName = "Отладка и трассировка"
-    override val category = Category.DEBUGGER
+    override val category = Category.DEBUG
 
     override suspend fun run(ctx: ProbeContext): List<Signal> {
         val out = ArrayList<Signal>()
@@ -24,7 +24,7 @@ class DebuggerProbe : BaseProbe() {
             triggered = tracerPid > 0,
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Поле TracerPid в /proc/self/status отлично от нуля: кто-то выполнил PTRACE_ATTACH и читает/меняет нашу память. Именно так работают frida-server и gdb.",
+            why = "Поле TracerPid в /proc/self/status отлично от нуля: кто-то выполнил PTRACE_ATTACH и читает или меняет нашу память. Именно так работают frida-server и gdb.",
             method = "procfs: /proc/self/status",
             evidence = listOf(ev("TracerPid", tracerPid)),
         )
