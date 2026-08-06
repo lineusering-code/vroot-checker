@@ -8,10 +8,10 @@ import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Signal
 import dev.vroot.checker.core.util.NativeBridge
 
-/** Отладчик, ptrace-трейсер и seccomp. */
+/** Debugger, ptrace tracer and seccomp state. */
 class DebuggerProbe : BaseProbe() {
     override val id = "debug.tracer"
-    override val displayName = "Отладка и трассировка"
+    override val displayName = "Debugging and tracing"
     override val category = Category.DEBUG
 
     override suspend fun run(ctx: ProbeContext): List<Signal> {
@@ -20,11 +20,11 @@ class DebuggerProbe : BaseProbe() {
         val tracerPid = NativeBridge.tracerPid()
         out += signal(
             id = "tracer_pid",
-            title = "К процессу прицеплён трассировщик",
+            title = "A tracer is attached to this process",
             triggered = tracerPid > 0,
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Поле TracerPid в /proc/self/status отлично от нуля: кто-то выполнил PTRACE_ATTACH и читает или меняет нашу память. Именно так работают frida-server и gdb.",
+            why = "TracerPid in /proc/self/status is non-zero: somebody called PTRACE_ATTACH and is reading or rewriting our memory. That is exactly how frida-server and gdb operate.",
             method = "procfs: /proc/self/status",
             evidence = listOf(ev("TracerPid", tracerPid)),
         )
@@ -33,36 +33,40 @@ class DebuggerProbe : BaseProbe() {
         val waiting = runCatching { Debug.waitingForDebugger() }.getOrDefault(false)
         out += signal(
             id = "jdwp",
-            title = "Подключён Java-отладчик",
+            title = "A Java debugger is connected",
             triggered = jdwp || waiting,
             severity = Severity.HIGH,
             confidence = 95,
-            why = "JDWP-сессия позволяет ставить точки останова и подменять значения переменных на лету.",
+            why = "A JDWP session can set breakpoints and rewrite variables on the fly.",
             method = "android.os.Debug",
             evidence = listOf(ev("isDebuggerConnected", jdwp), ev("waitingForDebugger", waiting)),
         )
 
+        // Contract of the native helper:
+        //   0  -> the control attach succeeded, so nobody else is tracing us
+        //   1  -> the attach was refused, somebody already holds the slot
+        //  -1  -> could not determine
         val ptraceSelf = NativeBridge.ptraceSelfTest()
         out += signal(
             id = "ptrace_self",
-            title = "Слот ptrace уже занят",
-            triggered = ptraceSelf == 0,
+            title = "The ptrace slot is already taken",
+            triggered = ptraceSelf == 1,
             severity = Severity.HIGH,
             confidence = 80,
-            why = "Процесс может трассироваться только одним трейсером. Если наш контрольный ptrace не прошёл — слот занял кто-то другой.",
-            method = "jni: ptrace(PTRACE_TRACEME) в fork-дочернем процессе",
-            evidence = listOf(ev("result", ptraceSelf)),
+            why = "A process can only be traced by one tracer at a time. Our control attach was refused, so somebody else is holding the slot.",
+            method = "jni: ptrace(PTRACE_ATTACH) from a forked child",
+            evidence = listOf(ev("result", ptraceSelf), ev("meaning", if (ptraceSelf == 0) "attach succeeded, no tracer" else if (ptraceSelf == 1) "attach refused" else "undetermined")),
         )
 
         val seccomp = NativeBridge.seccompMode()
         out += signal(
             id = "seccomp_off",
-            title = "seccomp-фильтр отключён",
+            title = "seccomp filter is disabled",
             triggered = seccomp == 0,
             severity = Severity.LOW,
             confidence = 55,
-            why = "Штатный zygote вешает на приложения seccomp-фильтр (режим 2). Нулевой режим встречается на модифицированных сборках и в контейнерах.",
-            method = "procfs: Seccomp в /proc/self/status",
+            why = "The stock zygote installs a seccomp filter (mode 2) on every app. Mode 0 shows up on modified builds and in containers.",
+            method = "procfs: Seccomp in /proc/self/status",
             evidence = listOf(ev("seccomp_mode", seccomp)),
         )
 

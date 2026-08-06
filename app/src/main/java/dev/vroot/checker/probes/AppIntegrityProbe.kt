@@ -4,6 +4,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.content.pm.Signature
 import android.os.Build
+import dev.vroot.checker.BuildConfig
 import dev.vroot.checker.core.BaseProbe
 import dev.vroot.checker.core.ProbeContext
 import dev.vroot.checker.core.model.Category
@@ -13,10 +14,10 @@ import dev.vroot.checker.core.util.Pkg
 import java.io.File
 import java.security.MessageDigest
 
-/** Целостность самого приложения: подпись, источник установки, debuggable, чужие .so. */
+/** Integrity of this app itself: signature, install source, debuggable, foreign .so files. */
 class AppIntegrityProbe : BaseProbe() {
     override val id = "integrity.app"
-    override val displayName = "Целостность приложения"
+    override val displayName = "Application integrity"
     override val category = Category.APP_INTEGRITY
 
     @Suppress("DEPRECATION")
@@ -26,23 +27,26 @@ class AppIntegrityProbe : BaseProbe() {
         val pkg = ctx.selfPackage
         val appInfo = ctx.app.applicationInfo
 
+        // A debug build is debuggable on purpose. Only report it as a finding
+        // when a release build somehow carries the flag.
         val debuggable = (appInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val unexpectedDebuggable = debuggable && !BuildConfig.DEBUG
         out += signal(
             id = "debuggable_flag",
-            title = "Сборка помечена как debuggable",
-            triggered = debuggable,
+            title = "Release build carries the debuggable flag",
+            triggered = unexpectedDebuggable,
             severity = Severity.MEDIUM,
             confidence = 95,
-            why = "Флаг debuggable разрешает прицепиться отладчиком и run-as без root. В релизе его быть не должно.",
-            method = "ApplicationInfo.flags",
-            evidence = listOf(ev("FLAG_DEBUGGABLE", debuggable)),
+            why = "FLAG_DEBUGGABLE lets anyone attach a debugger and use run-as without root. A release APK must never have it. This debug build is expected to.",
+            method = "ApplicationInfo.flags + BuildConfig.DEBUG",
+            evidence = listOf(ev("FLAG_DEBUGGABLE", debuggable), ev("BuildConfig.DEBUG", BuildConfig.DEBUG)),
         )
 
         val sha = runCatching {
             val sigs: List<Signature> =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val info = pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES)
-                    info.signingInfo?.apkContentsSigners?.filterNotNull().orEmpty()
+                    pm.getPackageInfo(pkg, PackageManager.GET_SIGNING_CERTIFICATES)
+                        .signingInfo?.apkContentsSigners?.filterNotNull().orEmpty()
                 } else {
                     pm.getPackageInfo(pkg, PackageManager.GET_SIGNATURES)
                         .signatures?.filterNotNull().orEmpty()
@@ -55,13 +59,13 @@ class AppIntegrityProbe : BaseProbe() {
         val expected = ctx.config.expectedSigningSha256
         out += signal(
             id = "signature",
-            title = "Подпись APK не совпадает с эталонной",
+            title = "APK signature does not match the expected one",
             triggered = expected != null && !sha.equals(expected, ignoreCase = true),
             severity = Severity.CRITICAL,
             confidence = 100,
-            why = "Если слепок сертификата отличается от ожидаемого — APK был распакован, изменён и подписан заново.",
+            why = "If the certificate digest differs from the expected value, the APK was unpacked, modified and re-signed.",
             method = "PackageManager signing certificates",
-            evidence = listOf(ev("sha256", sha.ifEmpty { "неизвестно" }), ev("expected", expected ?: "не задана")),
+            evidence = listOf(ev("sha256", sha.ifEmpty { "unknown" }), ev("expected", expected ?: "not configured")),
         )
 
         val installer = Pkg.installerOf(ctx.app, pkg)
@@ -71,13 +75,13 @@ class AppIntegrityProbe : BaseProbe() {
         )
         out += signal(
             id = "installer",
-            title = "Установлено не из доверенного магазина",
+            title = "Not installed from a trusted store",
             triggered = installer == null || installer !in trusted,
             severity = Severity.INFO,
             confidence = 60,
-            why = "Пустой installer значит установку через adb или файловый менеджер. Для диагностической утилиты это норма, поэтому вес минимальный.",
+            why = "An empty installer means adb or a file manager. For a diagnostics utility that is normal, hence the minimal weight.",
             method = "PackageManager installer",
-            evidence = listOf(ev("installer", installer ?: "нет")),
+            evidence = listOf(ev("installer", installer ?: "none")),
         )
 
         val libDir = appInfo.nativeLibraryDir.orEmpty()
@@ -86,11 +90,11 @@ class AppIntegrityProbe : BaseProbe() {
         val foreign = libs.filter { it !in known && !it.startsWith("libc++") }
         out += signal(
             id = "foreign_native_libs",
-            title = "Лишние .so в каталоге библиотек приложения",
+            title = "Extra .so files in the app library directory",
             triggered = foreign.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 75,
-            why = "В нашем APK только одна нативная библиотека. Любая другая рядом — след переупаковки или инжекта gadget.",
+            why = "Our APK ships exactly one native library. Anything next to it is a trace of repackaging or a gadget injection.",
             method = "nativeLibraryDir listing",
             evidence = foreign.take(8).map { ev("lib", it) },
         )
@@ -98,11 +102,11 @@ class AppIntegrityProbe : BaseProbe() {
         val sourceDir = appInfo.sourceDir.orEmpty()
         out += signal(
             id = "apk_location",
-            title = "APK лежит вне /data/app",
+            title = "APK lives outside /data/app",
             triggered = sourceDir.isNotEmpty() && !sourceDir.startsWith("/data/app"),
             severity = Severity.HIGH,
             confidence = 80,
-            why = "Штатно установленные приложения живут в /data/app. Другой путь бывает у контейнеров и предустановленных подмен.",
+            why = "Normally installed apps live in /data/app. A different path is typical for containers and pre-installed replacements.",
             method = "ApplicationInfo.sourceDir",
             evidence = listOf(ev("sourceDir", sourceDir)),
         )
