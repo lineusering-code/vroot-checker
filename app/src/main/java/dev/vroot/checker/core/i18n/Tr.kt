@@ -2,6 +2,7 @@ package dev.vroot.checker.core.i18n
 
 import dev.vroot.checker.core.model.Bucket
 import dev.vroot.checker.core.model.Category
+import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Verdict
 
 /**
@@ -52,6 +53,16 @@ object Tr {
         }
     }
 
+    fun verdictTitle(lang: Lang, v: Verdict): String = when (lang) {
+        Lang.EN -> v.title
+        Lang.RU -> when (v) {
+            Verdict.CLEAN -> "Чисто"
+            Verdict.SUSPICIOUS -> "Подозрительно"
+            Verdict.COMPROMISED -> "Скомпрометировано"
+            Verdict.HOSTILE -> "Активное вмешательство"
+        }
+    }
+
     fun verdictSummary(lang: Lang, v: Verdict): String = when (lang) {
         Lang.EN -> v.summary
         Lang.RU -> when (v) {
@@ -59,6 +70,17 @@ object Tr {
             Verdict.SUSPICIOUS -> "Есть отдельные слабые признаки"
             Verdict.COMPROMISED -> "Среда почти наверняка модифицирована"
             Verdict.HOSTILE -> "Что-то активно вмешивается в работу приложения"
+        }
+    }
+
+    fun severity(lang: Lang, s: Severity): String = when (lang) {
+        Lang.EN -> s.label
+        Lang.RU -> when (s) {
+            Severity.INFO -> "Инфо"
+            Severity.LOW -> "Низкий"
+            Severity.MEDIUM -> "Средний"
+            Severity.HIGH -> "Высокий"
+            Severity.CRITICAL -> "Критический"
         }
     }
 
