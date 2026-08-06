@@ -7,11 +7,19 @@ import dev.vroot.checker.core.model.Category
 import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Signal
 
-/** Анализ Build.* и внутренних противоречий прошивки. */
+/** Build.* analysis and internal contradictions in the firmware description. */
 class BuildFingerprintProbe : BaseProbe() {
     override val id = "virt.build"
-    override val displayName = "Отпечаток сборки"
+    override val displayName = "Build fingerprint"
     override val category = Category.EMULATOR
+
+    /**
+     * Tokens that are only meaningful in fields which a real vendor always
+     * fills in. Plenty of retail phones ship BOOTLOADER=unknown, and treating
+     * that as an emulator marker flagged every second stock device.
+     */
+    private val placeholderTokens = setOf("unknown", "")
+    private val placeholderAllowed = setOf("BOOTLOADER", "RADIO", "SERIAL", "BOARD", "HARDWARE")
 
     override suspend fun run(ctx: ProbeContext): List<Signal> {
         val out = ArrayList<Signal>()
@@ -28,22 +36,27 @@ class BuildFingerprintProbe : BaseProbe() {
             "BOOTLOADER" to Build.BOOTLOADER,
         ).mapValues { it.value.orEmpty() }
 
-        val hits = ArrayList<Pair<String, String>>()
+        val strong = ArrayList<Pair<String, String>>()
+        val weak = ArrayList<Pair<String, String>>()
         fields.forEach { (name, value) ->
             Signatures.EMULATOR_BUILD_TOKENS.forEach { token ->
-                if (value.contains(token, ignoreCase = true)) hits.add(name to (value + "  ← " + token))
+                if (PathTokens.containsToken(value, token)) {
+                    val entry = name to (value + "  <- " + token)
+                    val isPlaceholder = token.lowercase() in placeholderTokens && name in placeholderAllowed
+                    if (isPlaceholder) weak.add(entry) else strong.add(entry)
+                }
             }
         }
 
         out += signal(
             id = "build_tokens",
-            title = "Маркеры эмулятора в Build.*",
-            triggered = hits.isNotEmpty(),
-            severity = if (hits.size >= 3) Severity.CRITICAL else Severity.HIGH,
-            confidence = if (hits.size >= 3) 95 else 75,
-            why = "Поля Build у эмуляторов содержат характерные слова (generic, sdk_gphone, vbox86, ranchu и т.д.). Чем больше полей совпало, тем меньше шанс случайности.",
+            title = "Emulator markers in Build.*",
+            triggered = strong.isNotEmpty(),
+            severity = if (strong.size >= 3) Severity.CRITICAL else Severity.HIGH,
+            confidence = if (strong.size >= 3) 95 else 75,
+            why = "Emulator Build fields contain telltale words (generic, sdk_gphone, vbox86, ranchu). The more fields match, the less likely it is a coincidence. Placeholder values such as BOOTLOADER=unknown are ignored because retail phones ship them too.",
             method = "android.os.Build",
-            evidence = hits.take(12).map { ev(it.first, it.second) },
+            evidence = (strong + weak).take(12).map { ev(it.first, it.second) },
         )
 
         val brand = Build.BRAND.orEmpty().lowercase()
@@ -53,11 +66,11 @@ class BuildFingerprintProbe : BaseProbe() {
             !Build.FINGERPRINT.orEmpty().lowercase().contains(manufacturer)
         out += signal(
             id = "fingerprint_inconsistent",
-            title = "Fingerprint не бьётся с брендом",
+            title = "Fingerprint does not match the brand",
             triggered = inconsistent,
             severity = Severity.MEDIUM,
             confidence = 65,
-            why = "У стоковой прошивки fingerprint всегда начинается с имени бренда. Расхождение — признак подмены Build-полей (spoofing-модуль или эмулятор, маскирующийся под телефон).",
+            why = "On stock firmware the fingerprint always starts with the brand name. A mismatch means Build fields are being spoofed, either by a module or by an emulator posing as a phone.",
             method = "android.os.Build cross-check",
             evidence = listOf(
                 ev("BRAND", Build.BRAND),
@@ -69,11 +82,11 @@ class BuildFingerprintProbe : BaseProbe() {
         val propFingerprint = ctx.prop("ro.build.fingerprint")
         out += signal(
             id = "fingerprint_mismatch",
-            title = "Build.FINGERPRINT не равен ro.build.fingerprint",
+            title = "Build.FINGERPRINT differs from ro.build.fingerprint",
             triggered = propFingerprint.isNotEmpty() && propFingerprint != Build.FINGERPRINT,
             severity = Severity.HIGH,
             confidence = 85,
-            why = "Java-поле и системное свойство читаются из одного источника. Расхождение бывает только при активной подмене одного из уровней.",
+            why = "The Java field and the system property come from the same source. They only diverge when one of the layers is actively being rewritten.",
             method = "Build vs SystemProperties",
             evidence = listOf(ev("Build", Build.FINGERPRINT), ev("prop", propFingerprint)),
         )
