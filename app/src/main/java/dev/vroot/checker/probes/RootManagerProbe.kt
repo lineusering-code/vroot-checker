@@ -5,14 +5,17 @@ import dev.vroot.checker.core.ProbeContext
 import dev.vroot.checker.core.model.Category
 import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Signal
+import dev.vroot.checker.core.util.NativeBridge
 import dev.vroot.checker.core.util.Sys
 
-/** Magisk / Zygisk / KernelSU / APatch и их следы в ФС, сокетах и памяти. */
+/** Magisk / Zygisk / KernelSU / APatch traces in the filesystem, sockets and memory. */
 class RootManagerProbe : BaseProbe() {
     override val id = "root.manager"
-    override val displayName = "Root-менеджеры (Magisk / KernelSU / APatch)"
+    override val displayName = "Root managers (Magisk / KernelSU / APatch)"
     override val category = Category.ROOT_MANAGER
     override val timeoutMs = 2000L
+
+    private val rootTokens = listOf("magisk", "zygisk", "lspd", "riru", "ksu", "apatch")
 
     override suspend fun run(ctx: ProbeContext): List<Signal> {
         val out = ArrayList<Signal>()
@@ -20,11 +23,11 @@ class RootManagerProbe : BaseProbe() {
         val magisk = Sys.probeAll(Signatures.MAGISK_PATHS).filter { it.exists }
         out += signal(
             id = "magisk_files",
-            title = "Артефакты Magisk в файловой системе",
+            title = "Magisk artifacts in the filesystem",
             triggered = magisk.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Каталоги /data/adb/magisk, /data/adb/modules и /sbin/.magisk создаёт только Magisk. DenyList скрывает монтирования, но часто оставляет сами каталоги читаемыми.",
+            why = "Only Magisk creates /data/adb/magisk, /data/adb/modules and /sbin/.magisk. DenyList hides mounts but usually leaves the directories themselves readable.",
             method = "java.io.File + faccessat(JNI)",
             evidence = magisk.map { ev(it.path, it.describe()) },
         )
@@ -32,11 +35,11 @@ class RootManagerProbe : BaseProbe() {
         val ksu = Sys.probeAll(Signatures.KERNELSU_PATHS).filter { it.exists }
         out += signal(
             id = "kernelsu_apatch",
-            title = "Следы KernelSU / APatch",
+            title = "KernelSU / APatch traces",
             triggered = ksu.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 92,
-            why = "KernelSU и APatch — ядерный root без модификации системного раздела. Классические чеки на su их не видят, поэтому проверяем их рабочие каталоги отдельно.",
+            why = "KernelSU and APatch are kernel-level root that never touches the system partition, so classic su checks miss them. Their working directories are checked separately.",
             method = "java.io.File + faccessat(JNI)",
             evidence = ksu.map { ev(it.path, it.describe()) },
         )
@@ -44,57 +47,62 @@ class RootManagerProbe : BaseProbe() {
         val modules = Sys.dirEntries("/data/adb/modules")
         out += signal(
             id = "modules_installed",
-            title = "Установленные root-модули",
+            title = "Installed root modules",
             triggered = modules.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 90,
-            why = "Список модулей читается напрямую — это сразу показывает, что именно подмешано в систему (включая скрывалки).",
+            why = "Reading the module list directly shows exactly what has been grafted onto the system, hiding modules included.",
             method = "readdir /data/adb/modules",
             evidence = modules.take(20).map { ev("module", it) },
         )
 
         val magiskSockets = ctx.unixSockets.lineSequence()
-            .filter { it.contains("magisk", true) || it.contains("ksu", true) }
+            .filter { line -> PathTokens.anyToken(line, listOf("magisk", "ksu", "apatch")) }
             .take(10).toList()
         out += signal(
             id = "magisk_socket",
-            title = "Живой сокет root-демона",
+            title = "Live root daemon socket",
             triggered = magiskSockets.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Абстрактный unix-сокет демона виден в /proc/net/unix. Это признак НЕ просто установленного, а АКТИВНО РАБОТАЮЩЕГО root-демона.",
+            why = "The daemon's abstract unix socket is visible in /proc/net/unix. That means root is not merely installed, it is running right now.",
             method = "procfs: /proc/net/unix",
             evidence = magiskSockets.map { ev("socket", it.trim().takeLast(80)) },
         )
 
-        val zygiskMaps = ctx.maps.filter { r ->
-            val p = r.path.lowercase()
-            p.contains("zygisk") || p.contains("magisk") || p.contains("lspd") || p.contains("riru")
-        }
+        val zygiskMaps = ctx.maps.filter { r -> PathTokens.suspiciousPath(r.path, rootTokens) }
         out += signal(
             id = "zygisk_in_process",
-            title = "Zygisk / Riru внутри нашего процесса",
+            title = "Zygisk / Riru inside our own process",
             triggered = zygiskMaps.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 100,
-            why = "В адресном пространстве приложения замаплены библиотеки root-фреймворка — то есть в нас уже влезли.",
+            why = "Root framework libraries are mapped into this app's address space, meaning something has already climbed inside.",
             method = "procfs: /proc/self/maps",
             evidence = zygiskMaps.take(10).map { ev("region", it.path) },
         )
 
-        val nativeMaps = dev.vroot.checker.core.util.NativeBridge
-            .mapsScan(listOf("magisk", "zygisk", "lspd", "riru", "ksu"))
+        // The native scan uses plain substring matching, so its output is
+        // filtered with the same boundary rules before it counts as evidence.
+        val nativeMaps = NativeBridge.mapsScan(rootTokens)
+            .filter { line -> PathTokens.suspiciousPath(pathOf(line), rootTokens) }
         out += signal(
             id = "zygisk_native_view",
-            title = "Нативный скан maps видит роот-артефакты",
+            title = "Native maps scan sees root artifacts that Java does not",
             triggered = nativeMaps.isNotEmpty() && zygiskMaps.isEmpty(),
             severity = Severity.CRITICAL,
             confidence = 95,
-            why = "Нативное чтение maps нашло то, чего не видит Java. Значит, чтение /proc/self/maps из Java подменено.",
+            why = "Reading /proc/self/maps through a raw syscall found entries missing from the Java view, which means the Java file API is being filtered.",
             method = "jni: raw openat(/proc/self/maps)",
             evidence = nativeMaps.take(8).map { ev("line", it.takeLast(90)) },
         )
 
         return out
+    }
+
+    /** A maps line is "addr perms offset dev inode   path". We only judge the path. */
+    private fun pathOf(line: String): String {
+        val idx = line.indexOf('/')
+        return if (idx >= 0) line.substring(idx).trim() else ""
     }
 }
