@@ -6,13 +6,22 @@ import dev.vroot.checker.core.model.Category
 import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Signal
 
-/** Аномалии монтирования: overlay/tmpfs поверх системы и подмена mount namespace. */
+/** Mount anomalies: overlay/tmpfs over the system tree and namespace tampering. */
 class MountProbe : BaseProbe() {
     override val id = "root.mounts"
-    override val displayName = "Точки монтирования"
+    override val displayName = "Mount points"
     override val category = Category.MOUNTS
 
+    /** Where a systemless root would graft itself. /apex is deliberately absent. */
     private val systemMountPoints = listOf("/system", "/vendor", "/product", "/system_ext", "/apex")
+
+    /**
+     * Real, block-device backed system partitions. /apex is NOT one of them:
+     * on every Android 10+ device it is a rw tmpfs holding the APEX mounts,
+     * which used to make stock phones report a writable system partition.
+     */
+    private val realSystemPoints = listOf("/system", "/vendor", "/product", "/system_ext", "/odm")
+    private val blockFilesystems = listOf("ext4", "erofs", "f2fs", "squashfs")
 
     override suspend fun run(ctx: ProbeContext): List<Signal> {
         val out = ArrayList<Signal>()
@@ -25,11 +34,11 @@ class MountProbe : BaseProbe() {
         }
         out += signal(
             id = "overlay_on_system",
-            title = "overlayfs поверх системных разделов",
+            title = "overlayfs on top of system partitions",
             triggered = overlays.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 80,
-            why = "overlay на /system или /vendor — стандартный способ Magisk и KernelSU подменять системные файлы без записи в раздел (systemless).",
+            why = "An overlay on /system or /vendor is how Magisk and KernelSU replace system files without writing to the partition (systemless mode).",
             method = "procfs: /proc/mounts",
             evidence = overlays.take(8).map { ev("mount", it.take(120)) },
         )
@@ -42,11 +51,11 @@ class MountProbe : BaseProbe() {
         }
         out += signal(
             id = "tmpfs_on_system",
-            title = "tmpfs на /sbin или внутри /system",
+            title = "tmpfs on /sbin or inside /system",
             triggered = tmpfsHits.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 85,
-            why = "Magisk подкладывает своё окружение в tmpfs, смонтированный на /sbin или /debug_ramdisk. На стоке там tmpfs не бывает.",
+            why = "Magisk stages its environment in a tmpfs mounted on /sbin or /debug_ramdisk. A stock device has no tmpfs there.",
             method = "procfs: /proc/mounts",
             evidence = tmpfsHits.take(8).map { ev("mount", it.take(120)) },
         )
@@ -54,22 +63,25 @@ class MountProbe : BaseProbe() {
         val rwSystem = mounts.filter { line ->
             val parts = line.split(" ")
             val point = parts.getOrNull(1).orEmpty()
+            val fs = parts.getOrNull(2).orEmpty()
             val opts = parts.getOrNull(3).orEmpty()
-            systemMountPoints.any { point == it } && opts.split(",").contains("rw")
+            realSystemPoints.contains(point) &&
+                blockFilesystems.contains(fs) &&
+                opts.split(",").contains("rw")
         }
         out += signal(
             id = "system_rw",
-            title = "Системный раздел смонтирован на запись",
+            title = "System partition mounted read-write",
             triggered = rwSystem.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 90,
-            why = "На нормальном устройстве /system всегда ro. rw означает выполненный remount с правами root.",
+            why = "A real system partition is always ro on a healthy device; rw means a root remount was performed. The /apex tmpfs is excluded because it is rw by design on every Android 10+ device.",
             method = "procfs: /proc/mounts",
             evidence = rwSystem.take(5).map { ev("mount", it.take(120)) },
         )
 
-        // Классика: Magisk прячет свои монтирования в отдельном namespace,
-        // и два источника начинают противоречить друг другу.
+        // Classic tell: Magisk hides its mounts in a separate namespace and the
+        // two procfs views start contradicting each other.
         val fromMounts = mounts.mapNotNull { it.split(" ").getOrNull(1) }.toSet()
         val fromMountInfo = ctx.mountInfo.mapNotNull { it.split(" ").getOrNull(4) }.toSet()
         val onlyInInfo = (fromMountInfo - fromMounts).filter { it.startsWith("/") }
@@ -77,11 +89,11 @@ class MountProbe : BaseProbe() {
         val delta = onlyInInfo.size + onlyInMounts.size
         out += signal(
             id = "mount_namespace_mismatch",
-            title = "/proc/mounts и /proc/self/mountinfo расходятся",
+            title = "/proc/mounts and /proc/self/mountinfo disagree",
             triggered = delta > 3,
             severity = Severity.MEDIUM,
             confidence = 70,
-            why = "Два описания одного и того же namespace должны совпадать. Сильное расхождение — след манипуляций с mount namespace (MagiskHide / DenyList).",
+            why = "Two descriptions of the same namespace should match. A large delta is a trace of mount namespace manipulation (MagiskHide / DenyList).",
             method = "procfs cross-check",
             evidence = listOf(
                 ev("only_in_mountinfo", onlyInInfo.take(5).joinToString()),
@@ -90,14 +102,17 @@ class MountProbe : BaseProbe() {
             ),
         )
 
-        val magiskInMountInfo = ctx.mountInfo.filter { it.contains("magisk", true) || it.contains("worker", true) }
+        val magiskInMountInfo = ctx.mountInfo.filter { line ->
+            PathTokens.anyToken(line, listOf("magisk", "ksu", "apatch")) ||
+                line.contains("worker", ignoreCase = true)
+        }
         out += signal(
             id = "magisk_mount_source",
-            title = "Magisk-источники в mountinfo",
+            title = "Magisk mount sources in mountinfo",
             triggered = magiskInMountInfo.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 85,
-            why = "Имена источников вида magisk/worker остаются в mountinfo даже тогда, когда файлы уже скрыты.",
+            why = "Source names like magisk/worker survive in mountinfo even after the files themselves have been hidden.",
             method = "procfs: /proc/self/mountinfo",
             evidence = magiskInMountInfo.take(6).map { ev("line", it.take(120)) },
         )
