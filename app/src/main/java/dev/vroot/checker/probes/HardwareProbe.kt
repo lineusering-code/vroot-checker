@@ -14,12 +14,20 @@ import dev.vroot.checker.core.ProbeContext
 import dev.vroot.checker.core.model.Category
 import dev.vroot.checker.core.model.Severity
 import dev.vroot.checker.core.model.Signal
+import dev.vroot.checker.core.util.NativeBridge
 import java.net.NetworkInterface
 
-/** Косвенные признаки виртуальной среды: сенсоры, камеры, батарея, сеть, uptime. */
+/**
+ * Circumstantial evidence of a virtual environment: sensors, cameras, battery,
+ * network adapter, uptime and thermal zones.
+ *
+ * Every signal here is deliberately low or medium severity. None of them proves
+ * anything on its own - a phone can legitimately have an odd sensor list - but
+ * together they describe hardware that does not behave like hardware.
+ */
 class HardwareProbe : BaseProbe() {
     override val id = "virt.hardware"
-    override val displayName = "Железо и сенсоры"
+    override val displayName = "Hardware and sensors"
     override val category = Category.HARDWARE
     override val timeoutMs = 2500L
 
@@ -35,11 +43,11 @@ class HardwareProbe : BaseProbe() {
         }
         out += signal(
             id = "sensors",
-            title = "Набор сенсоров неправдоподобен",
+            title = "Implausible sensor inventory",
             triggered = sensors.size < 6 || fakeVendor > 0,
             severity = Severity.MEDIUM,
             confidence = if (fakeVendor > 0) 85 else 60,
-            why = "У реального телефона десятки сенсоров от реальных вендоров. Эмуляторы отдают короткий список с вендором AOSP/Goldfish.",
+            why = "A real phone exposes dozens of sensors from real vendors. Emulators return a short list attributed to AOSP or Goldfish.",
             method = "SensorManager",
             evidence = listOf(ev("count", sensors.size), ev("fake_vendor_sensors", fakeVendor)) +
                 sensors.take(5).map { ev(it.name, it.vendor) },
@@ -50,11 +58,11 @@ class HardwareProbe : BaseProbe() {
         }.getOrDefault(-1)
         out += signal(
             id = "cameras",
-            title = "Камеры отсутствуют",
+            title = "No cameras at all",
             triggered = cameras == 0,
             severity = Severity.MEDIUM,
             confidence = 70,
-            why = "Телефонов без единой камеры практически не бывает, а у части виртуалок и облачных телефонов камер нет вообще.",
+            why = "Phones without a single camera barely exist, while many virtual machines and cloud phones have none.",
             method = "CameraManager",
             evidence = listOf(ev("camera_count", cameras)),
         )
@@ -67,11 +75,11 @@ class HardwareProbe : BaseProbe() {
         val plugged = battery?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
         out += signal(
             id = "battery",
-            title = "Показания батареи синтетичны",
+            title = "Synthetic battery readings",
             triggered = (level == 100 && plugged > 0 && (temp <= 0 || temp == 250)) || temp == 0,
             severity = Severity.LOW,
             confidence = 60,
-            why = "Эмуляторы отдают фиксированные значения: вечные 100%, подключённое питание и температуру 25.0 °C или 0.",
+            why = "Emulators report fixed values: a permanent 100 percent, power always connected, and a temperature of exactly 25.0 C or 0.",
             method = "ACTION_BATTERY_CHANGED",
             evidence = listOf(ev("level", level), ev("temp_decikelvin", temp), ev("plugged", plugged)),
         )
@@ -81,11 +89,11 @@ class HardwareProbe : BaseProbe() {
         val simState = runCatching { tm?.simState ?: -1 }.getOrDefault(-1)
         out += signal(
             id = "telephony",
-            title = "Телефония выглядит эмулированной",
+            title = "Telephony looks emulated",
             triggered = operator.equals("Android", true) || operator.equals("emulator", true),
             severity = Severity.HIGH,
             confidence = 90,
-            why = "Оператор с именем «Android» — зашитый дефолт эмулятора AOSP.",
+            why = "A network operator literally named Android is the hardcoded default of the AOSP emulator.",
             method = "TelephonyManager",
             evidence = listOf(ev("operator", operator), ev("sim_state", simState)),
         )
@@ -101,11 +109,11 @@ class HardwareProbe : BaseProbe() {
         }
         out += signal(
             id = "mac_oui",
-            title = "MAC-адрес из диапазона виртуализации",
+            title = "MAC address from a virtualization range",
             triggered = vmMac.isNotEmpty(),
             severity = Severity.MEDIUM,
             confidence = 80,
-            why = "Префиксы OUI 08:00:27 (VirtualBox), 00:0c:29 (VMware), 52:54:00 (QEMU/KVM) выдают виртуальный сетевой адаптер.",
+            why = "The OUI prefixes 08:00:27 (VirtualBox), 00:0c:29 (VMware) and 52:54:00 (QEMU/KVM) give away a virtual network adapter.",
             method = "NetworkInterface",
             evidence = vmMac.map { ev(it.first, it.second) },
         )
@@ -113,23 +121,23 @@ class HardwareProbe : BaseProbe() {
         val uptimeMs = SystemClock.elapsedRealtime()
         out += signal(
             id = "uptime",
-            title = "Подозрительно малый uptime",
+            title = "Suspiciously short uptime",
             triggered = uptimeMs < 90_000,
             severity = Severity.LOW,
             confidence = 50,
-            why = "Свежезагруженная система типична для одноразовых виртуалок и ферм эмуляторов, где образ поднимается под задачу.",
+            why = "A freshly booted system is typical of disposable virtual machines and emulator farms where an image is spun up per task.",
             method = "SystemClock.elapsedRealtime",
             evidence = listOf(ev("uptime_ms", uptimeMs.toString())),
         )
 
-        val thermal = dev.vroot.checker.core.util.NativeBridge.openDirCount("/sys/class/thermal")
+        val thermal = NativeBridge.openDirCount("/sys/class/thermal")
         out += signal(
             id = "thermal_zones",
-            title = "Нет термозон",
+            title = "No thermal zones",
             triggered = thermal == 0,
             severity = Severity.LOW,
             confidence = 60,
-            why = "У реального SoC всегда есть термодатчики в /sys/class/thermal. Пустой каталог — признак виртуального железа.",
+            why = "A real SoC always exposes thermal sensors under /sys/class/thermal. An empty directory points at virtual hardware.",
             method = "jni: readdir",
             evidence = listOf(ev("thermal_zone_count", thermal)),
         )
