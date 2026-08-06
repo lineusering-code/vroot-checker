@@ -8,10 +8,10 @@ import dev.vroot.checker.core.model.Signal
 import dev.vroot.checker.core.util.NativeBridge
 import dev.vroot.checker.core.util.ProcMaps
 
-/** Инлайн-хуки в libc и чужой исполняемый код в памяти. */
+/** Inline hooks in libc and foreign executable code in our address space. */
 class NativeHookProbe : BaseProbe() {
     override val id = "hook.native"
-    override val displayName = "Нативные хуки и инжект кода"
+    override val displayName = "Native hooks and code injection"
     override val category = Category.HOOK_FRAMEWORK
 
     private val watchedSymbols = listOf(
@@ -23,6 +23,18 @@ class NativeHookProbe : BaseProbe() {
         "libdl.so" to "dlopen",
     )
 
+    /** Deleted mappings that every healthy ART process has. */
+    private val benignDeleted = listOf(
+        "/memfd:", "/dev/ashmem", "/dev/binderfs", "anon_", "dalvik-", "[anon:",
+    )
+
+    /** Only real code can carry an injected payload. */
+    private val codeSuffixes = listOf(".so", ".apk", ".jar", ".dex", ".oat", ".odex", ".vdex")
+
+    private val trustedLibRoots = listOf(
+        "/system/", "/system_ext/", "/apex/", "/vendor/", "/product/", "/odm/",
+    )
+
     override suspend fun run(ctx: ProbeContext): List<Signal> {
         val out = ArrayList<Signal>()
 
@@ -32,54 +44,58 @@ class NativeHookProbe : BaseProbe() {
         }
         out += signal(
             id = "inline_hooks",
-            title = "Прологи функций libc пропатчены",
+            title = "libc function prologues are patched",
             triggered = patched.isNotEmpty(),
             severity = Severity.CRITICAL,
             confidence = 85,
-            why = "Первые инструкции функции заменены безусловным переходом — так выглядит трамплин, установленный Dobby / frida-gum / Substrate. Значит, файловым вызовам доверять нельзя.",
-            method = "jni: анализ пролога через dlsym",
+            why = "The first instructions of the function were replaced with an unconditional branch — the shape of a trampoline planted by Dobby, frida-gum or Substrate. File-system calls can no longer be trusted.",
+            method = "jni: prologue analysis via dlsym",
             evidence = patched.map { ev("symbol", it) },
         )
 
         val anonExec = ProcMaps.suspiciousAnonExec(ctx.maps)
         out += signal(
             id = "anon_exec",
-            title = "Исполняемые анонимные регионы памяти",
+            title = "Executable anonymous memory regions",
             triggered = anonExec.size > 2,
             severity = Severity.MEDIUM,
             confidence = 60,
-            why = "Крупные rx-регионы без файла-источника — типичный след инжектированного кода (хотя часть даёт штатный JIT в ART, поэтому вес умеренный).",
+            why = "Large rx regions with no backing file are a classic sign of injected code, although the ART JIT legitimately creates some, hence the moderate weight.",
             method = "procfs: /proc/self/maps",
             evidence = anonExec.take(6).map {
                 ev(java.lang.Long.toHexString(it.start), it.perms + " size=" + it.size)
             },
         )
 
-        val deleted = ctx.maps.filter { it.path.contains("(deleted)") }
+        val deleted = ctx.maps.filter { r ->
+            val p = r.path
+            p.contains("(deleted)") &&
+                benignDeleted.none { p.startsWith(it) || p.contains(it) } &&
+                codeSuffixes.any { p.contains(it) }
+        }
         out += signal(
             id = "deleted_mappings",
-            title = "В памяти замаплены удалённые файлы",
+            title = "Deleted code files are mapped into memory",
             triggered = deleted.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 75,
-            why = "Загрузить .so и тут же удалить файл — классический способ скрыть инжектированную библиотеку от проверок по пути.",
+            why = "Loading a .so and immediately unlinking it is the classic way to hide an injected library from path-based checks. JIT caches and ashmem regions are excluded: every normal ART process shows those as deleted.",
             method = "procfs: /proc/self/maps",
             evidence = deleted.take(6).map { ev("region", it.path) },
         )
 
         val nonAppLibs = ctx.maps.filter { r ->
             r.path.endsWith(".so") &&
-                !r.path.startsWith("/system") && !r.path.startsWith("/apex") &&
-                !r.path.startsWith("/vendor") && !r.path.startsWith("/product") &&
+                trustedLibRoots.none { r.path.startsWith(it) } &&
                 !r.path.contains(ctx.selfPackage)
         }
         out += signal(
             id = "foreign_libs",
-            title = "Загружены .so из нетипичных мест",
+            title = ".so files loaded from unusual locations",
             triggered = nonAppLibs.isNotEmpty(),
             severity = Severity.HIGH,
             confidence = 70,
-            why = "Нативные библиотеки должны приходить из системных разделов или из каталога самого приложения. Всё остальное кто-то подсунул.",
+            why = "Native libraries should come from a read-only system partition or from this app's own directory. Anything else was placed there by somebody.",
             method = "procfs: /proc/self/maps",
             evidence = nonAppLibs.take(8).map { ev("lib", it.path) },
         )
