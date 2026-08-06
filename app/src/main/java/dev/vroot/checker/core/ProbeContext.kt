@@ -12,21 +12,28 @@ import dev.vroot.checker.core.util.Props
 import dev.vroot.checker.core.util.Sys
 
 data class EngineConfig(
-    /** Тайм-аут по умолчанию на пробу. */
+    /** Default per-probe timeout. */
     val probeTimeoutMs: Long = 1800L,
-    /** Разрешить exec(): часть чеков сильнее, но заметнее и медленнее. */
+    /** Allow exec(): some checks get stronger, but slower and more visible. */
     val allowShell: Boolean = true,
-    /** Какие корзины гонять. */
+    /** Which buckets to run. */
     val enabledBuckets: Set<Bucket> = Bucket.entries.toSet(),
-    /** Писать в лог и «чистые» проверки, а не только срабатывания. */
+    /**
+     * Probe ids the user switched off.
+     *
+     * These are removed before the scan starts, not filtered out of the
+     * results: a disabled check costs no time and cannot influence the score.
+     */
+    val disabledProbes: Set<String> = emptySet(),
+    /** Log clean checks too, not just the hits. */
     val logCleanChecks: Boolean = true,
-    /** Эталонный SHA-256 подписи APK (hex, нижний регистр) для проверки целостности. */
+    /** Expected APK signing SHA-256 (lowercase hex) for the integrity check. */
     val expectedSigningSha256: String? = null,
 )
 
 /**
- * Общий контекст сканирования: тяжёлые источники (/proc, список пакетов)
- * читаются один раз и переиспользуются всеми пробами.
+ * Shared scan context: expensive sources (/proc, the package list) are read
+ * once and reused by every probe.
  */
 class ProbeContext(
     val app: Context,

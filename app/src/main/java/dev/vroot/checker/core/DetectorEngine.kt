@@ -42,15 +42,27 @@ class DetectorEngine(
             val log = ScanLog(startedAt)
             val ctx = ProbeContext(app, log, config)
 
-            val probes = ProbeCatalog.all().filter { it.category.bucket in config.enabledBuckets }
+            val catalog = ProbeCatalog.all()
+            val probes = catalog.filter {
+                it.category.bucket in config.enabledBuckets && it.id !in config.disabledProbes
+            }
+            val skipped = catalog.map { it.id } - probes.map { it.id }.toSet()
+
             log.info("engine", "Vroot Checker diagnostics started", buildString {
-                append("Probes queued: ").append(probes.size)
+                append("Probes queued: ").append(probes.size).append(" of ").append(catalog.size)
                 append("\nNative layer: ").append(
                     if (NativeBridge.available) "loaded (libvroot.so)" else "UNAVAILABLE - some checks are skipped"
                 )
                 append("\nShell allowed: ").append(config.allowShell)
                 append("\nBuckets: ").append(config.enabledBuckets.joinToString { it.title })
+                if (skipped.isNotEmpty()) {
+                    // Recorded explicitly so a partial scan is never mistaken for a full one.
+                    append("\nSkipped by user: ").append(skipped.joinToString())
+                }
             })
+            if (skipped.isNotEmpty()) {
+                log.warn("engine", skipped.size.toString() + " checks are disabled in settings")
+            }
 
             val done = AtomicInteger(0)
             val reports = coroutineScope {
